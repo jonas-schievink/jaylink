@@ -1,10 +1,12 @@
-# TODO: Write a title
+# A crate for controlling J-Link debug probes
 
 [![crates.io](https://img.shields.io/crates/v/jaylink.svg)](https://crates.io/crates/jaylink)
 [![docs.rs](https://docs.rs/jaylink/badge.svg)](https://docs.rs/jaylink/)
 [![Build Status](https://travis-ci.org/jonas-schievink/jaylink.svg?branch=master)](https://travis-ci.org/jonas-schievink/jaylink)
 
-TODO: Briefly describe the crate here (eg. "This crate provides ...").
+This crate allows talking to J-Link debug probes attached via USB. The probe's
+pins can be controlled and I/O operations using JTAG or SWD can be performed,
+enabling control of target MCUs.
 
 Please refer to the [changelog](CHANGELOG.md) to see what changed in the last
 releases.
