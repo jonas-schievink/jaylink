@@ -418,7 +418,7 @@ impl JayLink {
         Ok(String::from_utf8_lossy(buf).to_string())
     }
 
-    /// Reads the hardware version string from the device.
+    /// Reads the hardware version from the device.
     ///
     /// This requires the [`GET_HW_VERSION`] capability.
     ///
