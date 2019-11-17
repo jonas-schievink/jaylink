@@ -507,7 +507,9 @@ impl JayLink {
         }
     }
 
-    /// Changes the state of the TMS pin (pin 7).
+    /// Changes the state of the TMS / SWDIO pin (pin 7).
+    ///
+    /// **Note**: This may not work correctly on some hardware.
     pub fn set_tms(&mut self, tms: bool) -> Result<()> {
         let cmd = if tms {
             Command::HwTms1
@@ -517,12 +519,41 @@ impl JayLink {
         self.write_cmd(&[cmd as u8])
     }
 
-    /// Changes the state of the TDI pin (pin 5).
+    /// Changes the state of the TDI / TX pin (pin 5).
+    ///
+    /// The pin will be set to the level of `VTref` if `tdi` is `true`, and to GND if it is `false`.
+    ///
+    /// **Note**: Detaching `VTref` might not affect the internal reading, so the old level might
+    /// still be used afterwards.
     pub fn set_tdi(&mut self, tdi: bool) -> Result<()> {
         let cmd = if tdi {
             Command::HwData1
         } else {
             Command::HwData0
+        };
+        self.write_cmd(&[cmd as u8])
+    }
+
+    /// Changes the state of the nTRST pin (pin 3).
+    ///
+    /// **Note**: This may not work correctly on some hardware.
+    pub fn set_trst(&mut self, trst: bool) -> Result<()> {
+        let cmd = if trst {
+            Command::HwTrst1
+        } else {
+            Command::HwTrst0
+        };
+        self.write_cmd(&[cmd as u8])
+    }
+
+    /// Changes the state of the RESET pin (pin 15).
+    ///
+    /// **Note**: This may not work correctly on some hardware.
+    pub fn set_reset(&mut self, reset: bool) -> Result<()> {
+        let cmd = if reset {
+            Command::HwReset1
+        } else {
+            Command::HwReset0
         };
         self.write_cmd(&[cmd as u8])
     }
