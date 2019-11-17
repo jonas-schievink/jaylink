@@ -1,0 +1,19 @@
+language: rust
+rust:
+  - 1.31.0  # TODO: Adjust minimum supported Rust version accordingly
+  - stable
+  - nightly
+cache: cargo
+sudo: false
+env:
+  global:
+    - RUSTFLAGS="--deny warnings"
+    - RUST_BACKTRACE=1
+    - CARGO_INCREMENTAL=0  # decrease size of `target` to make the cache smaller
+  matrix:
+    - FEATURES=""  # default configuration
+script:
+  - cargo test --all $FEATURES
+notifications:
+  email:
+    on_success: never

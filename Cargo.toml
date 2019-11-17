@@ -1,0 +1,60 @@
+[package]
+name = "jaylink"
+version = "0.0.0"
+authors = ["Jonas Schievink <jonasschievink@gmail.com>"]
+edition = "2018"
+description = "Library to communicate with J-Link USB devices"
+documentation = "https://docs.rs/jaylink/"
+repository = "https://github.com/jonas-schievink/jaylink.git"
+keywords = ["jlink", "debug", "probe", "emulator"]
+categories = ["embedded", "development-tools::debugging"]
+readme = "README.md"
+license = "0BSD"
+
+[badges]
+travis-ci = { repository = "jonas-schievink/jaylink" }
+maintenance = { status = "actively-developed" }
+
+[dev-dependencies]
+version-sync = "0.8"
+env_logger = "0.7.1"
+
+[dependencies]
+# Public
+bitflags = "1.2.1"
+bitvec = "0.15.2"
+# Private
+rusb = "0.5.2"
+log = "0.4.8"
+byteorder = "1.3.2"
+
+# cargo-release configuration
+[package.metadata.release]
+tag-message = "{{version}}"
+no-dev-version = true
+pre-release-commit-message = "Release {{version}}"
+
+# Change the changelog's `Unreleased` section to refer to this release and
+# prepend a new `Unreleased` section
+[[package.metadata.release.pre-release-replacements]]
+file    = "CHANGELOG.md"
+search  = "## Unreleased\n"
+replace = """
+## Unreleased
+
+No changes.
+
+## [{{version}} - {{date}}](https://github.com/jonas-schievink/jaylink/releases/tag/{{version}})
+"""
+
+# Bump the version inside the example manifest in `README.md`
+[[package.metadata.release.pre-release-replacements]]
+file    = "README.md"
+search  = 'jaylink = "[a-z0-9\\.-]+"'
+replace = 'jaylink = "{{version}}"'
+
+# Bump the version referenced by the `html_root_url` attribute in `lib.rs`
+[[package.metadata.release.pre-release-replacements]]
+file    = "src/lib.rs"
+search  = "https://docs.rs/jaylink/[a-z0-9\\.-]+"
+replace = "https://docs.rs/jaylink/{{version}}"
