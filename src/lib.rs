@@ -314,10 +314,18 @@ impl JayLink {
         let (intf, read_ep, write_ep) = if let Some(intf) = jlink_intf {
             intf
         } else {
-            return Err("J-Link USB interface not found".to_string()).jaylink_err();
+            return Err("device is not a J-Link device".to_string()).jaylink_err();
         };
 
         handle.claim_interface(intf).jaylink_err()?;
+
+        // Check that we're still in the expected configuration (another application could
+        // interfere).
+        // See: http://libusb.sourceforge.net/api-1.0/caveats.html
+        let conf = handle.active_configuration().jaylink_err()?;
+        if conf != 1 {
+            return Err("another application is accessing the device".to_string()).jaylink_err();
+        }
 
         Ok(Self {
             manufacturer: handle
