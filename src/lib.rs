@@ -776,8 +776,8 @@ impl JayLink {
         buf[0] = Command::HwJtag3 as u8;
         // buf[1] is dummy data for alignment
         buf[2..=3].copy_from_slice(&num_bits.to_le_bytes());
-        buf[4..4 + dir.as_slice().len()].copy_from_slice(dir.as_slice());
-        buf[4 + dir.as_slice().len()..][..swdio.as_slice().len()].copy_from_slice(swdio.as_slice());
+        buf[4..4 + num_bytes].copy_from_slice(dir.as_slice());
+        buf[4 + num_bytes..4 + num_bytes * 2].copy_from_slice(swdio.as_slice());
 
         self.write_cmd(&buf)?;
 
