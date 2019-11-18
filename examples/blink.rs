@@ -23,18 +23,22 @@ fn main() {
 fn run(opts: Opts) -> Result<()> {
     let mut probe = JayLink::open_by_serial(opts.serial.as_ref().map(|s| &**s))?;
 
+    // Enable power to enable testing all blinky pins without an ext. supply.
+    // Ignore errors since probes may not support this.
+    probe.set_kickstart_power(true).ok();
+
     loop {
         probe.set_tms(true)?;
         probe.set_tdi(true)?;
         probe.set_reset(true)?;
         probe.set_trst(true)?;
-        println!("on");
+        println!("on  {} V", probe.read_target_voltage()? as f32 / 1000.0);
         sleep(Duration::from_millis(500));
         probe.set_tms(false)?;
         probe.set_tdi(false)?;
         probe.set_reset(false)?;
         probe.set_trst(false)?;
-        println!("off");
+        println!("off {} V", probe.read_target_voltage()? as f32 / 1000.0);
         sleep(Duration::from_millis(500));
     }
 }
