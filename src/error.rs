@@ -67,6 +67,7 @@ pub(crate) trait Cause {
 pub struct Error {
     kind: ErrorKind,
     inner: BoxedError,
+    while_: Option<&'static str>,
 }
 
 impl Error {
@@ -74,6 +75,27 @@ impl Error {
         Self {
             kind,
             inner: inner.into(),
+            while_: None,
+        }
+    }
+
+    pub(crate) fn with_while(
+        kind: ErrorKind,
+        inner: impl Into<BoxedError>,
+        while_: &'static str,
+    ) -> Self {
+        Self {
+            kind,
+            inner: inner.into(),
+            while_: Some(while_),
+        }
+    }
+
+    fn fmt_while(&self) -> String {
+        if let Some(while_) = self.while_ {
+            format!(" while {}", while_)
+        } else {
+            String::new()
         }
     }
 
@@ -89,8 +111,8 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Prefix foreign errors with further explanation where they're coming from
         match self.kind {
-            ErrorKind::Usb => write!(f, "USB communication error: {}", self.inner),
-            _ => self.inner.fmt(f),
+            ErrorKind::Usb => write!(f, "USB error{}: {}", self.fmt_while(), self.inner),
+            _ => write!(f, "error{}: {}", self.fmt_while(), self.inner),
         }
     }
 }
@@ -105,6 +127,10 @@ pub(crate) trait ResultExt<T, E> {
     fn jaylink_err(self) -> Result<T, Error>
     where
         E: Cause + Into<BoxedError>;
+
+    fn jaylink_err_while(self, while_: &'static str) -> Result<T, Error>
+    where
+        E: Cause + Into<BoxedError>;
 }
 
 impl<T, E> ResultExt<T, E> for Result<T, E> {
@@ -113,6 +139,13 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
         E: Cause + Into<BoxedError>,
     {
         self.map_err(|e| Error::new(E::KIND, e))
+    }
+
+    fn jaylink_err_while(self, while_: &'static str) -> Result<T, Error>
+    where
+        E: Cause + Into<BoxedError>,
+    {
+        self.map_err(|e| Error::with_while(E::KIND, e, while_))
     }
 }
 

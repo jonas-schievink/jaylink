@@ -234,7 +234,10 @@ impl JayLink {
             .inner
             .device_descriptor()
             .expect("libusb_get_device_descriptor returned unexpected error");
-        let mut handle = usb_device.inner.open().jaylink_err()?;
+        let mut handle = usb_device
+            .inner
+            .open()
+            .jaylink_err_while("opening USB device")?;
 
         debug!("open_usb: device descriptor: {:#x?}", descr);
 
@@ -245,7 +248,9 @@ impl JayLink {
             );
         }
 
-        let conf = handle.active_configuration().jaylink_err()?;
+        let conf = handle
+            .active_configuration()
+            .jaylink_err_while("reading device configuration")?;
         // Device configurations are 1-indexed, apparently
         if conf != 1 {
             warn!(
@@ -255,7 +260,10 @@ impl JayLink {
             handle.set_active_configuration(1).jaylink_err()?;
         }
 
-        let conf = usb_device.inner.active_config_descriptor().jaylink_err()?;
+        let conf = usb_device
+            .inner
+            .active_config_descriptor()
+            .jaylink_err_while("reading device configuration descriptor")?;
         debug!("scanning {} interfaces", conf.num_interfaces());
         trace!("active configuration descriptor: {:#x?}", conf);
 
@@ -317,7 +325,9 @@ impl JayLink {
             return Err("device is not a J-Link device".to_string()).jaylink_err();
         };
 
-        handle.claim_interface(intf).jaylink_err()?;
+        handle
+            .claim_interface(intf)
+            .jaylink_err_while("taking control over USB device")?;
 
         // Check that we're still in the expected configuration (another application could
         // interfere).

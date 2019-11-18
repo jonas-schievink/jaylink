@@ -40,7 +40,7 @@ fn run() -> Result<()> {
                 Some(dev)
             }
             Err(e) => {
-                dev_data = format!("<error accessing device: {}>", e.to_string());
+                dev_data = format!("<{}>", e.to_string());
                 None
             }
         };
