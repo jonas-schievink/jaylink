@@ -675,6 +675,25 @@ impl JayLink {
         Ok(u16::from_le_bytes(voltage))
     }
 
+    /// Enable or disable the 5V Power supply on pin 19.
+    ///
+    /// This requires the [`SET_KS_POWER`] capability.
+    ///
+    /// **Note**: The startup state of the power supply can be configured in non-volatile memory.
+    ///
+    /// **Note**: Some embedded J-Links may not provide this feature or do not have the 5V supply
+    /// routed to a pin.
+    ///
+    /// **Note**: The 5V supply is protected against overcurrent. Check the device manual for more
+    /// information on this.
+    ///
+    /// [`SET_KS_POWER`]: struct.Capabilities.html#associatedconstant.SET_KS_POWER
+    pub fn set_kickstart_power(&mut self, enable: bool) -> Result<()> {
+        self.require_capabilities(Capabilities::SET_KS_POWER)?;
+        self.write_cmd(&[Command::SetKsPower as u8, enable as u8])?;
+        Ok(())
+    }
+
     /// Performs a JTAG I/O operation.
     ///
     /// This will put the probe into JTAG interface mode, if JTAG isn't selected already.
