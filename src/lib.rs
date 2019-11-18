@@ -598,7 +598,12 @@ impl JayLink {
     ///
     /// This requires the [`SELECT_IF`] capability.
     ///
+    /// **Note**: There is no guarantee that the returned interface is actually supported (ie. it
+    /// might not be in the list returned by [`read_available_interfaces`]). In particular, some
+    /// embedded J-Link probes start up with JTAG selected, but only support SWD.
+    ///
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
+    /// [`read_available_interfaces`]: #method.read_available_interfaces
     pub fn read_current_interface(&self) -> Result<Interface> {
         if let Some(intf) = self.interface.get() {
             Ok(intf)
