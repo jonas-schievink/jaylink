@@ -2,6 +2,9 @@ use jaylink::*;
 
 fn main() {
     env_logger::init();
+    if log::log_enabled!(target: "jaylink", log::Level::Trace) {
+        rusb::set_log_level(rusb::LogLevel::Debug);
+    }
 
     if let Err(e) = run() {
         eprintln!("error: {}", e);
