@@ -384,7 +384,7 @@ impl JayLink {
         let bytes = self
             .handle
             .write_bulk(self.write_ep, cmd, TIMEOUT_DEFAULT)
-            .jaylink_err()?;
+            .jaylink_err_while("writing data to device")?;
         if bytes != cmd.len() {
             return Err(rusb::Error::Other).jaylink_err();
         }
@@ -395,7 +395,7 @@ impl JayLink {
         let bytes = self
             .handle
             .read_bulk(self.read_ep, buf, TIMEOUT_DEFAULT)
-            .jaylink_err()?;
+            .jaylink_err_while("reading from device")?;
         if bytes != buf.len() {
             return Err(rusb::Error::Other).jaylink_err();
         }

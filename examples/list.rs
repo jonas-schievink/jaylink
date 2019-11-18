@@ -51,7 +51,7 @@ fn run() -> Result<()> {
             // Print detailed information read from the device
             let info = match detailed_info(&dev) {
                 Ok(info) => info,
-                Err(e) => format!("<error accessing device: {}>", e),
+                Err(e) => format!("<{}>", e),
             };
 
             // This is multi-line info
