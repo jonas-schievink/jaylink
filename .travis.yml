@@ -1,6 +1,6 @@
 language: rust
 rust:
-  - 1.31.0  # TODO: Adjust minimum supported Rust version accordingly
+  - 1.37.0
   - stable
   - nightly
 cache: cargo
