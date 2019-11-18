@@ -491,6 +491,7 @@ impl JayLink {
             self.read(&mut buf)?;
 
             let mut caps = Capabilities::from_raw_legacy(u32::from_le_bytes(buf));
+            debug!("legacy caps: {:?}", caps);
 
             // If the `GET_CAPS_EX` capability is set, use the extended capability command to fetch
             // all the capabilities.
@@ -507,7 +508,10 @@ impl JayLink {
                     ))
                     .jaylink_err();
                 }
+                debug!("extended caps: {:?}", real_caps);
                 caps = real_caps;
+            } else {
+                debug!("extended caps not supported");
             }
 
             self.caps.set(Some(caps));
@@ -596,6 +600,7 @@ impl JayLink {
             let intf = Interface::from_u32(raw)
                 .ok_or_else(|| format!("invalid interface value {}", raw))
                 .jaylink_err()?;
+            debug!("read active interface: {:?}", intf);
             self.interface.set(Some(intf));
             Ok(intf)
         }
