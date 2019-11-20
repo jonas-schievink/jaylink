@@ -13,6 +13,8 @@ struct Opts {
 }
 
 fn main() {
+    env_logger::init();
+
     let opts = Opts::from_args();
     if let Err(e) = run(opts) {
         eprintln!("error: {}", e);
