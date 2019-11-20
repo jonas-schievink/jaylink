@@ -381,25 +381,37 @@ impl JayLink {
     }
 
     fn write_cmd(&self, cmd: &[u8]) -> Result<()> {
+        trace!("write: {:x?}", cmd);
+
         let bytes = self
             .handle
             .write_bulk(self.write_ep, cmd, TIMEOUT_DEFAULT)
             .jaylink_err_while("writing data to device")?;
+
         if bytes != cmd.len() {
-            return Err(rusb::Error::Other).jaylink_err();
+            return Err(format!(
+                "incomplete write (expected {} bytes, wrote {})",
+                cmd.len(),
+                bytes
+            ))
+            .jaylink_err();
         }
         Ok(())
     }
 
     fn read(&self, buf: &mut [u8]) -> Result<()> {
-        let bytes = self
-            .handle
-            .read_bulk(self.read_ep, buf, TIMEOUT_DEFAULT)
-            .jaylink_err_while("reading from device")?;
-        if bytes != buf.len() {
-            return Err(rusb::Error::Other).jaylink_err();
+        let mut total = 0;
+
+        while total < buf.len() {
+            let buf = &mut buf[total..];
+            let bytes = self
+                .handle
+                .read_bulk(self.read_ep, buf, TIMEOUT_DEFAULT)
+                .jaylink_err_while("reading from device")?;
+            total += bytes;
         }
 
+        trace!("read: {:x?}", buf);
         Ok(())
     }
 
@@ -817,6 +829,8 @@ impl JayLink {
         assert!(dir.len() < 65535, "too much data to transfer");
 
         self.select_interface(Interface::Swd)?;
+
+        trace!("swd_io: {} bits; swdio={}; dir={}", swdio.len(), swdio, dir);
 
         let num_bits = dir.len() as u16;
         let num_bytes = usize::from((num_bits + 7) >> 3);
