@@ -843,11 +843,11 @@ impl JayLink {
 
         self.write_cmd(&buf)?;
 
-        // Response is `num_bytes` TDO data bytes and one status byte
+        // Response is `num_bytes` SWDIO data bytes and one status byte
         self.read(&mut buf[..num_bytes + 1])?;
 
         if buf[num_bytes] != 0 {
-            return Err(format!("JTAG op returned error code {:#x}", buf[num_bytes])).jaylink_err();
+            return Err(format!("SWD op returned error code {:#x}", buf[num_bytes])).jaylink_err();
         }
 
         swdio.as_mut_slice().copy_from_slice(&buf[..num_bytes]);
