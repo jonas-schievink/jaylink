@@ -381,7 +381,7 @@ impl JayLink {
     }
 
     fn write_cmd(&self, cmd: &[u8]) -> Result<()> {
-        trace!("write: {:x?}", cmd);
+        trace!("write {} bytes: {:x?}", cmd.len(), cmd);
 
         let bytes = self
             .handle
@@ -411,7 +411,7 @@ impl JayLink {
             total += bytes;
         }
 
-        trace!("read: {:x?}", buf);
+        trace!("read {} bytes: {:x?}", buf.len(), buf);
         Ok(())
     }
 
