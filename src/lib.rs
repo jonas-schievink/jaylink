@@ -171,6 +171,10 @@ pub struct JayLink {
     /// The currently selected target interface. This is cached to avoid unnecessary roundtrips when
     /// performing JTAG/SWD operations.
     interface: Cell<Option<Interface>>,
+    /// The configured interface speed. This is stored here when the user sets it. Switching
+    /// interfaces will revert to the default speed, in which case this library restores the speed
+    /// stored here.
+    speed: Cell<Option<CommunicationSpeed>>,
 
     manufacturer: String,
     product: String,
@@ -350,6 +354,7 @@ impl JayLink {
             cmd_buf: RefCell::new(Vec::new()),
             caps: Cell::new(None),
             interface: Cell::new(None),
+            speed: Cell::new(None),
             handle,
         })
     }
@@ -684,6 +689,11 @@ impl JayLink {
 
         self.interface.set(Some(intf));
 
+        if let Some(speed) = self.speed.get() {
+            // Restore previously configured comm speed
+            self.set_speed(speed)?;
+        }
+
         Ok(())
     }
 
@@ -702,6 +712,9 @@ impl JayLink {
         let mut buf = [Command::SetSpeed as u8, 0, 0];
         buf[1..3].copy_from_slice(&speed.raw.to_le_bytes());
         self.write_cmd(&buf)?;
+
+        self.speed.set(Some(speed));
+
         Ok(())
     }
 
@@ -868,7 +881,7 @@ impl fmt::Debug for JayLink {
 /// Target communication speed setting.
 ///
 /// This determines the clock frequency of the JTAG/SWD communication.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct CommunicationSpeed {
     raw: u16,
 }
