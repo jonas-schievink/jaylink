@@ -209,7 +209,7 @@ impl JayLink {
 
         let first = devices.next().ok_or_else(|| {
             let message = if let Some(serial ) = serial {
-                format!("no J-Link device with serial {} were found (make sure your current user has permissions to access them)", serial)
+                format!("no J-Link device with serial {} was found (make sure your current user has permissions to access it)", serial)
             } else {
                 "no J-Link devices found (make sure your current user has permissions to access them)".to_string()
             };
