@@ -112,10 +112,12 @@ impl fmt::Display for Error {
         // Prefix foreign errors with further explanation where they're coming from
         match self.kind {
             ErrorKind::Usb => write!(f, "USB error{}: {}", self.fmt_while(), self.inner),
-            _ => if let Some(while_) = self.while_ {
-                write!(f, "error{}: {}", while_, self.inner)
-            } else {
-                self.inner.fmt(f)
+            _ => {
+                if let Some(while_) = self.while_ {
+                    write!(f, "error{}: {}", while_, self.inner)
+                } else {
+                    self.inner.fmt(f)
+                }
             }
         }
     }
