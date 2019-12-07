@@ -1,4 +1,5 @@
 use jaylink::*;
+use std::fmt::Write;
 
 fn main() {
     env_logger::init();
@@ -85,14 +86,14 @@ fn detailed_info(dev: &JayLink) -> Result<String> {
     let tgt_voltage = dev.read_target_voltage()?;
 
     let mut info = String::new();
-    info += &format!(" Capabilities: {:?}\n", caps);
-    info += &format!("     Firmware: {}\n", firmware);
-    info += &format!("   HW Version: {}\n", hw_vers);
-    info += &format!("       Speeds: {:?}\n", speeds);
-    info += &format!("Max. Memblock: {} bytes\n", max_mem_block);
-    info += &format!("    Interface: {}\n", intf);
-    info += &format!("Avail. Interf: {}\n", avail_intfs);
-    info += &format!("        VTref: {} V\n", tgt_voltage as f32 / 1000.0);
+    writeln!(info, " Capabilities: {:?}", caps).unwrap();
+    writeln!(info, "     Firmware: {}", firmware).unwrap();
+    writeln!(info, "   HW Version: {}", hw_vers).unwrap();
+    writeln!(info, "       Speeds: {:?}", speeds).unwrap();
+    writeln!(info, "Max. Memblock: {} bytes", max_mem_block).unwrap();
+    writeln!(info, "    Interface: {}", intf).unwrap();
+    writeln!(info, "Avail. Interf: {}", avail_intfs).unwrap();
+    writeln!(info, "        VTref: {} V", tgt_voltage as f32 / 1000.0).unwrap();
 
     Ok(info)
 }
