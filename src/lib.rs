@@ -59,6 +59,7 @@
 #![doc(test(attr(deny(unused_imports, unused_must_use))))]
 #![warn(missing_debug_implementations, rust_2018_idioms)]
 
+mod bits;
 mod capabilities;
 mod error;
 mod readme;
@@ -71,20 +72,19 @@ mod private {
     pub enum Private {}
 }
 
-pub use bitvec;
-
+pub use self::bits::BitIter;
 pub use self::capabilities::Capabilities;
 pub use self::error::{Error, ErrorKind};
 
-pub(crate) use self::error::ResultExt as _;
+use self::bits::IteratorExt as _;
+use self::error::ResultExt as _;
 use bitflags::bitflags;
-use bitvec::{cursor, slice::BitSlice};
 use byteorder::{LittleEndian, ReadBytesExt};
 use log::{debug, trace, warn};
 use std::cell::{Cell, RefCell, RefMut};
-use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use std::{cmp, fmt};
 
 /// A result type with the error hardwired to [`Error`].
 ///
@@ -379,10 +379,10 @@ impl JayLink {
         &self.serial
     }
 
-    fn buf(&self, len: usize) -> RefMut<'_, [u8]> {
+    fn buf(&self, len: usize) -> RefMut<'_, Vec<u8>> {
         let mut vec = self.cmd_buf.borrow_mut();
         vec.resize(len, 0);
-        RefMut::map(vec, |vec| &mut **vec)
+        vec
     }
 
     fn write_cmd(&self, cmd: &[u8]) -> Result<()> {
@@ -750,29 +750,29 @@ impl JayLink {
 
     /// Performs a JTAG I/O operation.
     ///
-    /// This will put the probe into JTAG interface mode, if JTAG isn't selected already.
+    /// This will shift out data on `TMS` (pin 7) and `TDI` (pin 5), while reading data shifted
+    /// into `TDO` (pin 13).
+    ///
+    /// The data received on `TDO` is returned to the caller as an iterator yielding `bool`s.
+    ///
+    /// The probe will be put into JTAG interface mode, if JTAG isn't selected already.
     ///
     /// # Parameters
     ///
     /// * `tms`: TMS bits to transmit.
-    /// * `tdi_tdo`: TDI bits to transmit, and TDO receive buffer.
+    /// * `tdi`: TDI bits to transmit.
     ///
     /// # Panics
     ///
-    /// This method will panic if `tms` and `tdi_tdo` have different lengths. It will also panic if
-    /// any of them contains more then 65535 bits of data.
-    pub fn jtag_io(
-        &mut self,
-        tms: &BitSlice<cursor::LittleEndian, u8>,
-        tdi_tdo: &mut BitSlice<cursor::LittleEndian, u8>,
-    ) -> Result<()> {
-        assert_eq!(
-            tms.len(),
-            tdi_tdo.len(),
-            "TMS and TDI must have the same number of bits"
-        );
-        assert!(tms.len() < 65535, "too much data to transfer");
-
+    /// This method will panic if `tms` and `tdi` have different lengths. It will also panic if any
+    /// of them contains more then 65535 bits of data, which is the maximum amount that can be
+    /// transferred in one operation.
+    // NB: Explicit `'a` lifetime used to improve rustdoc output
+    pub fn jtag_io<'a, M, D>(&'a mut self, tms: M, tdi: D) -> Result<BitIter<'a>>
+    where
+        M: IntoIterator<Item = bool>,
+        D: IntoIterator<Item = bool>,
+    {
         // There's 3 commands for doing a JTAG transfer. The older 2 are obsolete with hardware
         // version 5 and above, which adds the 3rd command. Unfortunately we cannot reliably use the
         // HW version to determine this since some embedded J-Link probes have a HW version of
@@ -787,16 +787,31 @@ impl JayLink {
             Command::HwJtag2
         };
 
-        // JTAG3 and JTAG2 use the same format for JTAG operations
-        let num_bits = tms.len() as u16;
-        let num_bytes = usize::from((num_bits + 7) >> 3);
-        let mut buf = self.buf(1 + 1 + 2 + num_bytes * 2);
+        // Collect the bit iterators into the buffer. We don't know the length in advance.
+        let tms = tms.into_iter();
+        let tdi = tdi.into_iter();
+        let bit_count_hint = cmp::max(tms.size_hint().0, tdi.size_hint().0);
+        let capacity = 1 + 1 + 2 + (bit_count_hint + 7 / 8) * 2;
+        let mut buf = self.buf(capacity);
+        buf.resize(4, 0);
         buf[0] = cmd as u8;
         // buf[1] is dummy data for alignment
+        // buf[2..=3] is the bit count, which we'll fill in later
+        buf.extend(tms.collapse_bytes());
+        let tms_bit_count = buf.len() - 4;
+        buf.extend(tdi.collapse_bytes());
+        let tdi_bit_count = buf.len() - 4 - tms_bit_count;
+
+        assert_eq!(
+            tms_bit_count, tdi_bit_count,
+            "TMS and TDI must have the same number of bits"
+        );
+        assert!(tms_bit_count < 65535, "too much data to transfer");
+
+        // JTAG3 and JTAG2 use the same format for JTAG operations
+        let num_bits = tms_bit_count as u16;
         buf[2..=3].copy_from_slice(&num_bits.to_le_bytes());
-        buf[4..4 + tms.as_slice().len()].copy_from_slice(tms.as_slice());
-        buf[4 + tms.as_slice().len()..][..tdi_tdo.as_slice().len()]
-            .copy_from_slice(tdi_tdo.as_slice());
+        let num_bytes = usize::from((num_bits + 7) >> 3);
 
         self.write_cmd(&buf)?;
 
@@ -804,11 +819,15 @@ impl JayLink {
         self.read(&mut buf[..num_bytes + 1])?;
 
         if buf[num_bytes] != 0 {
-            return Err(format!("JTAG op returned error code {:#x}", buf[num_bytes])).jaylink_err();
+            return Err(format!("SWD op returned error code {:#x}", buf[num_bytes])).jaylink_err();
         }
 
-        tdi_tdo.as_mut_slice().copy_from_slice(&buf[..num_bytes]);
-        Ok(())
+        drop(buf);
+
+        Ok(BitIter::new(
+            &self.cmd_buf.get_mut()[..num_bytes],
+            tms_bit_count,
+        ))
     }
 
     /// Performs an SWD I/O operation.
@@ -819,40 +838,52 @@ impl JayLink {
     ///
     /// # Parameters
     ///
-    /// * `dir`: Transfer direction of the bit (0 = Input, 1 = Output).
+    /// * `dir`: Transfer directions of the `swdio` bits (`false` = 0 = Input, `true` = 1 = Output).
     /// * `swdio`: SWD data bits.
     ///
-    /// If `dir` is 1, the corresponding bit in `swdio` will be written to the target; if it is 0,
-    /// the bit in `swdio` is ignored and a bit is read from the target instead.
+    /// If `dir` is `true`, the corresponding bit in `swdio` will be written to the target; if it is
+    /// `false`, the bit in `swdio` is ignored and a bit is read from the target instead.
     ///
-    /// After this call returns, bits in `swdio` whose `dir` is 0 are replaced with the bit read
-    /// from the target. Written bits (with a `dir` of 1), are undefined.
+    /// # Return Value
+    ///
+    /// An iterator over the `SWDIO` bits is returned. Bits that were sent to the target (where
+    /// `dir` = `true`) are undefined, and bits that were read from the target (`dir` = `false`)
+    /// will have whatever value the target sent.
     ///
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
-    pub fn swd_io(
-        &mut self,
-        dir: &BitSlice<cursor::LittleEndian, u8>,
-        swdio: &mut BitSlice<cursor::LittleEndian, u8>,
-    ) -> Result<()> {
-        assert_eq!(
-            dir.len(),
-            swdio.len(),
-            "DIR and SWDIO must have the same number of bits"
-        );
-        assert!(dir.len() < 65535, "too much data to transfer");
-
+    // NB: Explicit `'a` lifetime used to improve rustdoc output
+    pub fn swd_io<'a, D, S>(&'a mut self, dir: D, swdio: S) -> Result<BitIter<'a>>
+    where
+        D: IntoIterator<Item = bool>,
+        S: IntoIterator<Item = bool>,
+    {
         self.select_interface(Interface::Swd)?;
 
-        trace!("swd_io: {} bits; swdio={}; dir={}", swdio.len(), swdio, dir);
-
-        let num_bits = dir.len() as u16;
-        let num_bytes = usize::from((num_bits + 7) >> 3);
-        let mut buf = self.buf(1 + 1 + 2 + num_bytes * 2);
+        // Collect the bit iterators into the buffer. We don't know the length in advance.
+        let dir = dir.into_iter();
+        let swdio = swdio.into_iter();
+        let bit_count_hint = cmp::max(dir.size_hint().0, swdio.size_hint().0);
+        let capacity = 1 + 1 + 2 + (bit_count_hint + 7 / 8) * 2;
+        let mut buf = self.buf(capacity);
+        buf.resize(4, 0);
         buf[0] = Command::HwJtag3 as u8;
+        buf[1] = 0;
         // buf[1] is dummy data for alignment
+        // buf[2..=3] is the bit count, which we'll fill in later
+        let mut dir_bit_count = 0;
+        buf.extend(dir.inspect(|_| dir_bit_count += 1).collapse_bytes());
+        let mut swdio_bit_count = 0;
+        buf.extend(swdio.inspect(|_| swdio_bit_count += 1).collapse_bytes());
+
+        assert_eq!(
+            dir_bit_count, swdio_bit_count,
+            "DIR and SWDIO must have the same number of bits"
+        );
+        assert!(dir_bit_count < 65535, "too much data to transfer");
+
+        let num_bits = dir_bit_count as u16;
         buf[2..=3].copy_from_slice(&num_bits.to_le_bytes());
-        buf[4..4 + num_bytes].copy_from_slice(dir.as_slice());
-        buf[4 + num_bytes..4 + num_bytes * 2].copy_from_slice(swdio.as_slice());
+        let num_bytes = usize::from((num_bits + 7) >> 3);
 
         self.write_cmd(&buf)?;
 
@@ -863,8 +894,12 @@ impl JayLink {
             return Err(format!("SWD op returned error code {:#x}", buf[num_bytes])).jaylink_err();
         }
 
-        swdio.as_mut_slice().copy_from_slice(&buf[..num_bytes]);
-        Ok(())
+        drop(buf);
+
+        Ok(BitIter::new(
+            &self.cmd_buf.get_mut()[..num_bytes],
+            dir_bit_count,
+        ))
     }
 }
 
