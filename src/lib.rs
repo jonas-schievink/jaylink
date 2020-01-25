@@ -773,6 +773,7 @@ impl JayLink {
         M: IntoIterator<Item = bool>,
         D: IntoIterator<Item = bool>,
     {
+        let mut has_status_byte = false;
         // There's 3 commands for doing a JTAG transfer. The older 2 are obsolete with hardware
         // version 5 and above, which adds the 3rd command. Unfortunately we cannot reliably use the
         // HW version to determine this since some embedded J-Link probes have a HW version of
@@ -780,6 +781,7 @@ impl JayLink {
         let cmd = if self.has_capabilities(Capabilities::SELECT_IF)? {
             // Use the new JTAG3 command, make sure to select the JTAG interface mode
             self.select_interface(Interface::Jtag)?;
+            has_status_byte = true;
             Command::HwJtag3
         } else {
             // Use the legacy JTAG2 command
@@ -798,35 +800,45 @@ impl JayLink {
         // buf[1] is dummy data for alignment
         // buf[2..=3] is the bit count, which we'll fill in later
         buf.extend(tms.collapse_bytes());
-        let tms_bit_count = buf.len() - 4;
+        let tms_byte_count = buf.len() - 4;
         buf.extend(tdi.collapse_bytes());
-        let tdi_bit_count = buf.len() - 4 - tms_bit_count;
+        let tdi_byte_count = buf.len() - 4 - tms_byte_count;
 
         assert_eq!(
-            tms_bit_count, tdi_bit_count,
+            tms_byte_count, tdi_byte_count,
             "TMS and TDI must have the same number of bits"
         );
-        assert!(tms_bit_count < 65535, "too much data to transfer");
+        assert!((tms_byte_count * 8) < 65535, "too much data to transfer");
 
         // JTAG3 and JTAG2 use the same format for JTAG operations
-        let num_bits = tms_bit_count as u16;
+        let num_bits = (tms_byte_count * 8) as u16;
         buf[2..=3].copy_from_slice(&num_bits.to_le_bytes());
         let num_bytes = usize::from((num_bits + 7) >> 3);
 
         self.write_cmd(&buf)?;
 
-        // Response is `num_bytes` TDO data bytes and one status byte
-        self.read(&mut buf[..num_bytes + 1])?;
+        trace!("Reading {} antwort bytes", num_bytes);
 
-        if buf[num_bytes] != 0 {
-            return Err(format!("SWD op returned error code {:#x}", buf[num_bytes])).jaylink_err();
+        // Response is `num_bytes` TDO data bytes and one status byte,
+        // if the JTAG3 command is used.
+        let mut read_len = num_bytes;
+
+        if has_status_byte {
+            read_len += 1;
+        }
+
+        self.read(&mut buf[..read_len])?;
+
+        // Check the status if a JTAG3 command was used.
+        if has_status_byte && buf[read_len - 1] != 0 {
+            return Err(Error::new(ErrorKind::Other, "Error reading JTAG data"));
         }
 
         drop(buf);
 
         Ok(BitIter::new(
             &self.cmd_buf.get_mut()[..num_bytes],
-            tms_bit_count,
+            num_bits as usize,
         ))
     }
 
