@@ -450,7 +450,15 @@ impl JayLink {
         let mut buf = &mut buf[..usize::from(num_bytes)];
         self.read(&mut buf)?;
 
-        Ok(String::from_utf8_lossy(buf).to_string())
+        Ok(String::from_utf8_lossy(
+            // The firmware version string returned may contain null bytes. If
+            // this happens, only return the preceding bytes.
+            match buf.iter().position(|&b| b == 0) {
+                Some(pos) => &buf[..pos],
+                None => buf,
+            },
+        )
+        .into_owned())
     }
 
     /// Reads the hardware version from the device.
