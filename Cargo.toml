@@ -27,7 +27,7 @@ replace = """
 
 No changes.
 
-## [{{version}} - {{date}}](https://github.com/jonas-schievink/jaylink/releases/tag/{{version}})
+## [{{version}} - {{date}}](https://github.com/jonas-schievink/jaylink/releases/tag/v{{version}})
 """
 
 # Bump the version inside the example manifest in `README.md`
