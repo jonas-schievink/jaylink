@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No changes.
+
+## [0.1.3 - 2020-07-09](https://github.com/jonas-schievink/jaylink/releases/tag/v0.1.3)
+
 Update rusb dependency to version 0.6.2.
 
 ## [0.1.2 - 2020-06-27](https://github.com/jonas-schievink/jaylink/releases/tag/v0.1.2)
