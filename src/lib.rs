@@ -62,6 +62,7 @@
 mod bits;
 mod capabilities;
 mod error;
+mod interface;
 mod readme;
 
 mod private {
@@ -75,10 +76,10 @@ mod private {
 pub use self::bits::BitIter;
 pub use self::capabilities::Capabilities;
 pub use self::error::{Error, ErrorKind};
+pub use self::interface::{Interface, InterfaceIter, Interfaces};
 
 use self::bits::IteratorExt as _;
 use self::error::ResultExt as _;
-use bitflags::bitflags;
 use byteorder::{LittleEndian, ReadBytesExt};
 use log::{debug, trace, warn};
 use std::cell::{Cell, RefCell, RefMut};
@@ -959,68 +960,6 @@ impl CommunicationSpeed {
         } else {
             Some(Self { raw: khz })
         }
-    }
-}
-
-/// List of target interfaces (JTAG / SWD).
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Interface {
-    /// JTAG interface.
-    Jtag,
-    /// SWD interface (Serial Wire Debug).
-    Swd,
-
-    #[doc(hidden)]
-    __NonExhaustive(private::Private),
-}
-
-impl Interface {
-    fn from_u32(raw: u32) -> Option<Self> {
-        match raw {
-            0 => Some(Interface::Jtag),
-            1 => Some(Interface::Swd),
-            _ => None,
-        }
-    }
-
-    fn as_u8(self) -> u8 {
-        match self {
-            Interface::Jtag => 0,
-            Interface::Swd => 1,
-            Interface::__NonExhaustive(_) => unreachable!(),
-        }
-    }
-}
-
-impl fmt::Display for Interface {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Interface::Jtag => f.write_str("JTAG"),
-            Interface::Swd => f.write_str("SWD"),
-            Interface::__NonExhaustive(_) => unreachable!(),
-        }
-    }
-}
-
-bitflags! {
-    /// Bitset of supported target interfaces.
-    pub struct Interfaces: u32 {
-        /// JTAG interface.
-        const JTAG = (1 << 0);
-        /// SWD interface (Serial Wire Debug).
-        const SWD = (1 << 1);
-    }
-}
-
-impl Interfaces {
-    /// Returns an iterator over all [`Interface`]s in this bitset.
-    ///
-    /// [`Interface`]: enum.Interface.html
-    pub fn into_iter(self) -> impl Iterator<Item = Interface> {
-        [(Self::JTAG, Interface::Jtag), (Self::SWD, Interface::Swd)]
-            .iter()
-            .filter(move |(flag, _)| self.contains(*flag))
-            .map(|(_, intf)| *intf)
     }
 }
 
