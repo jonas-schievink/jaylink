@@ -139,7 +139,7 @@ impl JayLinkExt for JayLink {
         swdio.push(a2);
         swdio.push(a3);
         // even parity, subtracting `start` bit
-        let even_parity = (swdio.iter().filter(|b| **b == true).count() - 1) % 2 != 0;
+        let even_parity = (swdio.iter().filter(|b| **b).count() - 1) % 2 != 0;
         swdio.push(even_parity);
         swdio.push(false); // stop bit
         swdio.push(true); // park bit
@@ -218,7 +218,7 @@ impl JayLinkExt for JayLink {
         swdio.push(a2);
         swdio.push(a3);
         // even parity, subtracting `start` bit
-        let even_parity = (swdio.iter().filter(|b| **b == true).count() - 1) % 2 != 0;
+        let even_parity = (swdio.iter().filter(|b| **b).count() - 1) % 2 != 0;
         swdio.push(even_parity);
         swdio.push(false); // stop bit
         swdio.push(true); // park bit
@@ -278,7 +278,7 @@ impl JayLinkExt for JayLink {
 }
 
 fn run(opts: Opts) -> Result<(), SwdError> {
-    let mut probe = JayLink::open_by_serial(opts.serial.as_ref().map(|s| &**s))?;
+    let mut probe = JayLink::open_by_serial(opts.serial.as_deref())?;
 
     // Limit speed so invalid 0xffff doesn't appear
     let khz = cmp::min(opts.speed.unwrap_or(200), 0xfffe);

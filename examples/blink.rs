@@ -23,7 +23,7 @@ fn main() {
 }
 
 fn run(opts: Opts) -> Result<()> {
-    let mut probe = JayLink::open_by_serial(opts.serial.as_ref().map(|s| &**s))?;
+    let mut probe = JayLink::open_by_serial(opts.serial.as_deref())?;
 
     // Enable power to enable testing all blinky pins without an ext. supply.
     // Ignore errors since probes may not support this.
