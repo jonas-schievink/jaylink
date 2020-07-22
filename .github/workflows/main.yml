@@ -28,8 +28,8 @@ jobs:
         profile: minimal
         toolchain: stable
         override: true
-    - name: Build
-      run: cargo build --verbose
+    - name: Run Tests
+      run: cargo test --verbose
 
   lint:
     runs-on: ubuntu-latest
