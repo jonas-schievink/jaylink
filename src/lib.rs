@@ -801,7 +801,7 @@ impl JayLink {
         let tms = tms.into_iter();
         let tdi = tdi.into_iter();
         let bit_count_hint = cmp::max(tms.size_hint().0, tdi.size_hint().0);
-        let capacity = 1 + 1 + 2 + (bit_count_hint + 7 / 8) * 2;
+        let capacity = 1 + 1 + 2 + ((bit_count_hint + 7) / 8) * 2;
         let mut buf = self.buf(capacity);
         buf.resize(4, 0);
         buf[0] = cmd as u8;
@@ -883,7 +883,7 @@ impl JayLink {
         let dir = dir.into_iter();
         let swdio = swdio.into_iter();
         let bit_count_hint = cmp::max(dir.size_hint().0, swdio.size_hint().0);
-        let capacity = 1 + 1 + 2 + (bit_count_hint + 7 / 8) * 2;
+        let capacity = 1 + 1 + 2 + ((bit_count_hint + 7) / 8) * 2;
         let mut buf = self.buf(capacity);
         buf.resize(4, 0);
         buf[0] = Command::HwJtag3 as u8;
