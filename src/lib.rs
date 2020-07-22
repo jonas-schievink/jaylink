@@ -1142,9 +1142,7 @@ fn log_libusb_info() {
         vers.minor(),
         vers.micro(),
         vers.nano(),
-        vers.rc()
-            .map(|rc| format!("-{}", rc))
-            .unwrap_or(String::new())
+        vers.rc().map(|rc| format!("-{}", rc)).unwrap_or_default(),
     );
 
     debug!("libusb has capability API: {:?}", rusb::has_capability());
