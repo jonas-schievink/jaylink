@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No changes.
+
+## [0.1.4 - 2020-07-26](https://github.com/jonas-schievink/jaylink/releases/tag/v0.1.4)
+
 ### New Features
 
 - Implement SWO capture support.
