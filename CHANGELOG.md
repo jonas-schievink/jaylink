@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-No changes.
+### New Features
+
+- Implement SWO capture support.
+- Add functions to calculate the maximum supported transport speed.
 
 ## [0.1.3 - 2020-07-09](https://github.com/jonas-schievink/jaylink/releases/tag/v0.1.3)
 
