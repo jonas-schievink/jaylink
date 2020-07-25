@@ -87,15 +87,15 @@ fn detailed_info(dev: &JayLink) -> Result<String> {
     let tgt_voltage = dev.read_target_voltage()?;
 
     let mut info = String::new();
-    writeln!(info, " Capabilities: {:?}", caps).unwrap();
-    writeln!(info, "     Firmware: {}", firmware).unwrap();
-    writeln!(info, "   HW Version: {}", hw_vers).unwrap();
-    writeln!(info, "       Speeds: {:?}", speeds).unwrap();
-    writeln!(info, "   SWO Speeds: {:?}", swo_speeds).unwrap();
-    writeln!(info, "Max. Memblock: {} bytes", max_mem_block).unwrap();
-    writeln!(info, "    Interface: {}", intf).unwrap();
-    writeln!(info, "Avail. Interf: {}", avail_intfs).unwrap();
-    writeln!(info, "        VTref: {} V", tgt_voltage as f32 / 1000.0).unwrap();
+    writeln!(info, "  Capabilities: {:?}", caps).unwrap();
+    writeln!(info, "      Firmware: {}", firmware).unwrap();
+    writeln!(info, "    HW Version: {}", hw_vers).unwrap();
+    writeln!(info, "    Max. Speed: {:?}", speeds.max_speed()).unwrap();
+    writeln!(info, "Max. SWO Speed: {:?}", swo_speeds.max_speed()).unwrap();
+    writeln!(info, " Max. Memblock: {} bytes", max_mem_block).unwrap();
+    writeln!(info, "     Interface: {}", intf).unwrap();
+    writeln!(info, " Avail. Interf: {}", avail_intfs).unwrap();
+    writeln!(info, "         VTref: {} V", tgt_voltage as f32 / 1000.0).unwrap();
 
     Ok(info)
 }

@@ -1353,6 +1353,11 @@ impl Speeds {
     pub fn min_div(&self) -> u16 {
         self.min_div
     }
+
+    /// Returns the maximum supported speed for SWD/JTAG operation (in Hz).
+    pub fn max_speed(&self) -> u32 {
+        self.base_freq / u32::from(self.min_div)
+    }
 }
 
 /// Supported SWO capture speed info.
@@ -1365,6 +1370,13 @@ pub struct SwoSpeeds {
     // FIXME: Not sure what these are for.
     min_presc: u32,
     max_presc: u32,
+}
+
+impl SwoSpeeds {
+    /// Returns the maximum supported speed for SWO capture (in Hz).
+    pub fn max_speed(&self) -> u32 {
+        self.base_freq / self.min_div / cmp::max(1, self.min_presc)
+    }
 }
 
 /// Generic info about a USB device.
