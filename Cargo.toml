@@ -50,6 +50,7 @@ maintenance = { status = "actively-developed" }
 version-sync = "0.9"
 env_logger = "0.7.1"
 structopt = "0.3.4"
+itm = "0.3.1"
 
 [dependencies]
 # Public

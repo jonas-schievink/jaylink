@@ -80,12 +80,19 @@ pub use self::interface::{Interface, InterfaceIter, Interfaces};
 
 use self::bits::IteratorExt as _;
 use self::error::ResultExt as _;
+use bitflags::bitflags;
 use byteorder::{LittleEndian, ReadBytesExt};
+use io::Cursor;
 use log::{debug, trace, warn};
 use std::cell::{Cell, RefCell, RefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
-use std::{cmp, fmt};
+use std::time::{Duration, Instant};
+use std::{
+    cmp, fmt,
+    io::{self, Read},
+    ops::Deref,
+    thread,
+};
 
 /// A result type with the error hardwired to [`Error`].
 ///
@@ -127,6 +134,7 @@ enum Command {
     HwJtagGetResult = 0xD6,
     HwTrst0 = 0xDE,
     HwTrst1 = 0xDF,
+    Swo = 0xEB,
     WriteDcc = 0xF1,
 
     ResetTarget = 0x03,
@@ -143,6 +151,49 @@ enum Command {
 
     ReadConfig = 0xF2,
     WriteConfig = 0xF3,
+}
+
+#[repr(u8)]
+enum SwoCommand {
+    Start = 0x64,
+    Stop = 0x65,
+    Read = 0x66,
+    GetSpeeds = 0x6E,
+}
+
+#[repr(u8)]
+enum SwoParam {
+    Mode = 0x01,
+    Baudrate = 0x02,
+    ReadSize = 0x03,
+    BufferSize = 0x04,
+    // FIXME: Do these have hardware/firmware version requirements to be recognized?
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[repr(u32)]
+#[non_exhaustive]
+pub enum SwoMode {
+    Uart = 0x00000000,
+    // FIXME: Manchester encoding?
+}
+
+bitflags! {
+    /// SWO status returned by probe on SWO buffer read.
+    struct SwoStatus: u32 {
+        /// The on-probe buffer has overflowed. Device data was lost.
+        const OVERRUN = 1 << 0;
+    }
+}
+
+impl SwoStatus {
+    fn new(bits: u32) -> Self {
+        let flags = SwoStatus::from_bits_truncate(bits);
+        if flags.bits() != bits {
+            warn!("Unknown SWO status flag bits: 0x{:08X}", bits);
+        }
+        flags
+    }
 }
 
 /// A handle to a J-Link USB device.
@@ -478,7 +529,7 @@ impl JayLink {
         Ok(HardwareVersion::from_u32(u32::from_le_bytes(buf)))
     }
 
-    /// Read the probe's CPU speed information.
+    /// Reads the probe's CPU speed information.
     ///
     /// This requires the [`SPEED_INFO`] capability.
     ///
@@ -495,6 +546,50 @@ impl JayLink {
         Ok(Speeds {
             base_freq: buf.read_u32::<LittleEndian>().unwrap(),
             min_div: buf.read_u16::<LittleEndian>().unwrap(),
+        })
+    }
+
+    /// Reads the probe's SWO capture speed information.
+    ///
+    /// This requires the [`SWO`] capability.
+    ///
+    /// [`SWO`]: struct.Capabilities.html#associatedconstant.SWO
+    pub fn read_swo_speeds(&self, mode: SwoMode) -> Result<SwoSpeeds> {
+        self.require_capabilities(Capabilities::SWO)?;
+
+        let mut buf = [0; 9];
+        buf[0] = Command::Swo as u8;
+        buf[1] = SwoCommand::GetSpeeds as u8;
+        buf[2] = 0x04; // Next param has 4 data Bytes
+        buf[3] = SwoParam::Mode as u8;
+        buf[4..8].copy_from_slice(&(mode as u32).to_le_bytes());
+        buf[8] = 0x00;
+
+        self.write_cmd(&buf)?;
+
+        let mut buf = [0; 28];
+        self.read(&mut buf)?;
+
+        let mut len = [0; 4];
+        len.copy_from_slice(&buf[0..4]);
+        let len = u32::from_le_bytes(len);
+        if len != 28 {
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!("Unexpected response length {}, expected 28", len),
+            ));
+        }
+
+        // Skip length and reserved word.
+        // FIXME: What's the word after the length for?
+        let mut buf = &buf[8..];
+
+        Ok(SwoSpeeds {
+            base_freq: buf.read_u32::<LittleEndian>().unwrap(),
+            min_div: buf.read_u32::<LittleEndian>().unwrap(),
+            max_div: buf.read_u32::<LittleEndian>().unwrap(),
+            min_presc: buf.read_u32::<LittleEndian>().unwrap(),
+            max_presc: buf.read_u32::<LittleEndian>().unwrap(),
         })
     }
 
@@ -922,6 +1017,108 @@ impl JayLink {
             dir_bit_count,
         ))
     }
+
+    /// Starts capturing SWO data in UART (NRZ) mode.
+    pub fn swo_start_uart<'a>(&'a mut self, baudrate: u32, buf_size: u32) -> Result<SwoStream<'a>> {
+        self.require_capabilities(Capabilities::SWO)?;
+
+        // The probe must be in SWD mode for SWO capture to work.
+        self.select_interface(Interface::Swd)?;
+
+        let mut buf = [0; 21];
+        buf[0] = Command::Swo as u8;
+        buf[1] = SwoCommand::Start as u8;
+        buf[2] = 0x04;
+        buf[3] = SwoParam::Mode as u8;
+        buf[4..8].copy_from_slice(&(SwoMode::Uart as u32).to_le_bytes());
+        buf[8] = 0x04;
+        buf[9] = SwoParam::Baudrate as u8;
+        buf[10..14].copy_from_slice(&baudrate.to_le_bytes());
+        buf[14] = 0x04;
+        buf[15] = SwoParam::BufferSize as u8;
+        buf[16..20].copy_from_slice(&buf_size.to_le_bytes());
+        buf[20] = 0x00;
+
+        self.write_cmd(&buf)?;
+
+        let mut status = [0; 4];
+        self.read(&mut status)?;
+        let status = SwoStatus::new(u32::from_le_bytes(status));
+
+        Ok(SwoStream {
+            jaylink: self,
+            baudrate,
+            buf_size,
+            buf: Cursor::new(Vec::new()),
+            next_poll: Instant::now(),
+            status: Cell::new(status),
+        })
+    }
+
+    /// Stops capturing SWO data.
+    pub fn swo_stop(&mut self) -> Result<()> {
+        self.require_capabilities(Capabilities::SWO)?;
+
+        let buf = [
+            Command::Swo as u8,
+            SwoCommand::Stop as u8,
+            0x00, // no parameters
+        ];
+
+        self.write_cmd(&buf)?;
+
+        let mut status = [0; 4];
+        self.read(&mut status)?;
+        let _status = SwoStatus::new(u32::from_le_bytes(status));
+        // FIXME: What to do with the status?
+
+        Ok(())
+    }
+
+    /// Reads captured SWO data from the probe and writes it to `data`.
+    ///
+    /// This needs to be called regularly after SWO capturing has been started. If it is not called
+    /// often enough, the buffer on the probe will fill up and device data will be dropped.
+    ///
+    /// Note that the probe firmware seems to dislike many short SWO reads (as in, the probe will
+    /// fall off the bus and reset), so it is recommended to use a buffer that is the same size as
+    /// the on-probe data buffer.
+    pub fn swo_read<'a>(&self, data: &'a mut [u8]) -> Result<SwoData<'a>> {
+        let mut cmd = [0; 9];
+        cmd[0] = Command::Swo as u8;
+        cmd[1] = SwoCommand::Read as u8;
+        cmd[2] = 0x04;
+        cmd[3] = SwoParam::ReadSize as u8;
+        cmd[4..8].copy_from_slice(&(data.len() as u32).to_le_bytes());
+        cmd[8] = 0x00;
+
+        self.write_cmd(&cmd)?;
+
+        let mut header = [0; 8];
+        self.read(&mut header)?;
+
+        let status = {
+            let mut status = [0; 4];
+            status.copy_from_slice(&header[0..4]);
+            let bits = u32::from_le_bytes(status);
+            SwoStatus::new(bits)
+        };
+        let length = {
+            let mut length = [0; 4];
+            length.copy_from_slice(&header[4..8]);
+            u32::from_le_bytes(length)
+        };
+
+        if status.contains(SwoStatus::OVERRUN) {
+            warn!("SWO probe buffer overrun");
+        }
+
+        let len = length as usize;
+        let buf = &mut data[..len];
+        self.read(buf)?;
+
+        Ok(SwoData { data: buf, status })
+    }
 }
 
 impl fmt::Debug for JayLink {
@@ -931,6 +1128,120 @@ impl fmt::Debug for JayLink {
             .field("product", &self.product)
             .field("serial", &self.serial)
             .finish()
+    }
+}
+
+/// A SWO data stream that implements `std::io::Read`.
+///
+/// This is one way to consume SWO data. The other is to call [`JayLink::swo_read`] after SWO
+/// capturing has been started.
+///
+/// Reading from this stream will block until some data is captured by the probe.
+///
+/// [`JayLink::swo_read`]: struct.JayLink.html#method.swo_read
+#[derive(Debug)]
+pub struct SwoStream<'a> {
+    jaylink: &'a JayLink,
+    baudrate: u32,
+    buf_size: u32,
+    next_poll: Instant,
+    /// Internal buffer the size of the on-probe buffer. This is filled in one go to avoid
+    /// performing small reads which may crash the probe.
+    buf: Cursor<Vec<u8>>,
+    /// Accumulated SWO errors.
+    status: Cell<SwoStatus>,
+}
+
+impl SwoStream<'_> {
+    /// Returns whether the probe-internal buffer overflowed at some point, and clears the flag.
+    ///
+    /// This indicates that some device data was lost.
+    pub fn did_overrun(&self) -> bool {
+        let did = self.status.get().contains(SwoStatus::OVERRUN);
+        self.status.set(self.status.get() & !SwoStatus::OVERRUN);
+        did
+    }
+
+    /// Computes the suggested polling interval to avoid buffer overruns.
+    fn poll_interval(&self) -> Duration {
+        const MULTIPLIER: u32 = 2;
+
+        let bytes_per_sec = self.baudrate / 8;
+        let buffers_per_sec =
+            cmp::max(1, bytes_per_sec / self.buf.get_ref().len() as u32) * MULTIPLIER;
+        Duration::from_micros(1_000_000 / u64::from(buffers_per_sec))
+    }
+}
+
+fn to_io_error(error: Error) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, error)
+}
+
+impl<'a> Read for SwoStream<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.buf.position() == self.buf.get_ref().len() as u64 {
+            // At end of buffer. (Blocking) Refill.
+            self.buf.get_mut().resize(self.buf_size as usize, 0);
+            loop {
+                // If we have recently polled, wait until the next poll is useful to avoid 100% CPU
+                // usage.
+                let now = Instant::now();
+                if now < self.next_poll {
+                    thread::sleep(self.next_poll - now);
+                }
+
+                let buf = self.buf.get_mut();
+                let data = self.jaylink.swo_read(buf).map_err(to_io_error)?;
+                self.status.set(self.status.get() | data.status);
+                let len = data.len();
+
+                // Since `self.buf` is the same length as the on-probe buffer, the probe buffer is
+                // now empty and we can wait `self.poll_interval()` until the next read.
+                self.next_poll += self.poll_interval();
+
+                if len != 0 {
+                    // There's now *some* data in the buffer.
+                    self.buf.get_mut().truncate(len);
+                    self.buf.set_position(0);
+                    break;
+                }
+
+                // If `data.len() == 0`, no data from the target has arrived. Since we can't return 0
+                // bytes (it indicates the end of the stream, in reality the stream is just very slow),
+                // we just loop (and sleep appropriately to not waste CPU).
+            }
+        }
+
+        self.buf.read(buf)
+    }
+}
+
+/// SWO data that was read via `swo_read`.
+#[derive(Debug)]
+pub struct SwoData<'a> {
+    data: &'a [u8],
+    status: SwoStatus,
+}
+
+impl<'a> SwoData<'a> {
+    /// Returns whether the probe-internal buffer overflowed before the last read.
+    ///
+    /// This indicates that some device data was lost.
+    pub fn did_overrun(&self) -> bool {
+        self.status.contains(SwoStatus::OVERRUN)
+    }
+}
+
+impl<'a> AsRef<[u8]> for SwoData<'a> {
+    fn as_ref(&self) -> &[u8] {
+        self.data
+    }
+}
+
+impl<'a> Deref for SwoData<'a> {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        self.data
     }
 }
 
@@ -1042,6 +1353,18 @@ impl Speeds {
     pub fn min_div(&self) -> u16 {
         self.min_div
     }
+}
+
+/// Supported SWO capture speed info.
+#[derive(Debug)]
+pub struct SwoSpeeds {
+    base_freq: u32,
+    min_div: u32,
+    max_div: u32,
+
+    // FIXME: Not sure what these are for.
+    min_presc: u32,
+    max_presc: u32,
 }
 
 /// Generic info about a USB device.

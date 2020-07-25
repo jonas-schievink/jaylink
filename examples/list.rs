@@ -76,6 +76,7 @@ fn detailed_info(dev: &JayLink) -> Result<String> {
     let firmware = dev.read_firmware_version()?;
     let hw_vers = dev.read_hardware_version()?;
     let speeds = dev.read_speeds()?;
+    let swo_speeds = dev.read_swo_speeds(SwoMode::Uart)?;
     let max_mem_block = dev.read_max_mem_block()?;
     let intf = dev.read_current_interface()?;
     let avail_intfs = dev
@@ -90,6 +91,7 @@ fn detailed_info(dev: &JayLink) -> Result<String> {
     writeln!(info, "     Firmware: {}", firmware).unwrap();
     writeln!(info, "   HW Version: {}", hw_vers).unwrap();
     writeln!(info, "       Speeds: {:?}", speeds).unwrap();
+    writeln!(info, "   SWO Speeds: {:?}", swo_speeds).unwrap();
     writeln!(info, "Max. Memblock: {} bytes", max_mem_block).unwrap();
     writeln!(info, "    Interface: {}", intf).unwrap();
     writeln!(info, "Avail. Interf: {}", avail_intfs).unwrap();
