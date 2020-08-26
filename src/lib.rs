@@ -293,7 +293,16 @@ impl JayLink {
         let mut handle = usb_device
             .inner
             .open()
-            .jaylink_err_while("opening USB device")?;
+            .map_err(|e| {
+                if cfg!(windows) && (e == rusb::Error::NotSupported || e == rusb::Error::NotFound) {
+                    Error::with_while(ErrorKind::Usb, r"
+                        This error may be caused by not having the WinUSB driver installed.
+                        Use Zadig (https://zadig.akeo.ie/) to install the WinUSB driver for the J-Link device.
+                        This will replace the SEGGER J-Link driver!", "opening USB device")
+                } else {
+                    Error::with_while(ErrorKind::Usb, e, "opening USB device")
+                }
+            })?;
 
         debug!("open_usb: device descriptor: {:#x?}", descr);
 
