@@ -54,7 +54,7 @@
 //!
 //! The archive.org version is the most up-to-date one.
 
-#![doc(html_root_url = "https://docs.rs/jaylink/0.1.4")]
+#![doc(html_root_url = "https://docs.rs/jaylink/0.1.5")]
 // Deny a few warnings in doctests, since rustdoc `allow`s many warnings by default
 #![doc(test(attr(deny(unused_imports, unused_must_use))))]
 #![warn(missing_debug_implementations, rust_2018_idioms)]

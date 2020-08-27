@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No changes.
+
+## [0.1.5 - 2020-08-27](https://github.com/jonas-schievink/jaylink/releases/tag/v0.1.5)
+
 - Improve error message on Windows, hinting at installing WinUSB.
 
 ## [0.1.4 - 2020-07-26](https://github.com/jonas-schievink/jaylink/releases/tag/v0.1.4)
