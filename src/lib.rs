@@ -290,19 +290,23 @@ impl JayLink {
             .inner
             .device_descriptor()
             .expect("libusb_get_device_descriptor returned unexpected error");
-        let mut handle = usb_device
-            .inner
-            .open()
-            .map_err(|e| {
-                if cfg!(windows) && (e == rusb::Error::NotSupported || e == rusb::Error::NotFound) {
-                    Error::with_while(ErrorKind::Usb, r"
-                        This error may be caused by not having the WinUSB driver installed.
-                        Use Zadig (https://zadig.akeo.ie/) to install the WinUSB driver for the J-Link device.
-                        This will replace the SEGGER J-Link driver!", "opening USB device")
-                } else {
-                    Error::with_while(ErrorKind::Usb, e, "opening USB device")
-                }
-            })?;
+        let mut handle = usb_device.inner.open().map_err(|e| {
+            let inner: Box<dyn std::error::Error + Send + Sync> = if cfg!(windows)
+                && (e == rusb::Error::NotSupported || e == rusb::Error::NotFound)
+            {
+                format!(
+                    "{} (this error may be caused by not having the \
+                        WinUSB driver installed; use Zadig (https://zadig.akeo.ie/) to install it \
+                        for the J-Link device; this will replace the SEGGER J-Link driver)",
+                    e
+                )
+                .into()
+            } else {
+                Box::new(e)
+            };
+
+            Error::with_while(ErrorKind::Usb, inner, "opening USB device")
+        })?;
 
         debug!("open_usb: device descriptor: {:#x?}", descr);
 
