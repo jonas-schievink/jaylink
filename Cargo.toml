@@ -48,7 +48,7 @@ maintenance = { status = "actively-developed" }
 
 [dev-dependencies]
 version-sync = "0.9"
-env_logger = "0.7.1"
+env_logger = "0.8.1"
 structopt = "0.3.4"
 itm = "0.3.1"
 
