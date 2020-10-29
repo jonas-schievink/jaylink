@@ -170,6 +170,7 @@ enum SwoParam {
     // FIXME: Do these have hardware/firmware version requirements to be recognized?
 }
 
+/// The supported SWO data encoding modes.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(u32)]
 #[non_exhaustive]
