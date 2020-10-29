@@ -1326,7 +1326,7 @@ impl HardwareVersion {
 impl fmt::Display for HardwareVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(hw) = self.hardware_type() {
-            write!(f, "{:?} ", hw)?;
+            write!(f, "{} ", hw)?;
         }
         write!(f, "{}.{}.{}", self.major(), self.minor(), self.revision())
     }
@@ -1340,6 +1340,17 @@ pub enum HardwareType {
     JTrace,
     Flasher,
     JLinkPro,
+}
+
+impl fmt::Display for HardwareType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            HardwareType::JLink => "J-Link",
+            HardwareType::JTrace => "J-Trace",
+            HardwareType::Flasher => "J-Flash",
+            HardwareType::JLinkPro => "J-Link Pro",
+        })
+    }
 }
 
 /// J-Link CPU frequency info.
