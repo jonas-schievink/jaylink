@@ -65,14 +65,6 @@ mod error;
 mod interface;
 mod readme;
 
-mod private {
-    /// Used in `__NonExhaustive` variants to make them unconstructible.
-    ///
-    /// Users are still able to match on them, unfortunately.
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub enum Private {}
-}
-
 pub use self::bits::BitIter;
 pub use self::capabilities::Capabilities;
 pub use self::error::{Error, ErrorKind};
@@ -1341,15 +1333,13 @@ impl fmt::Display for HardwareVersion {
 }
 
 /// The hardware/product type of the device.
+#[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum HardwareType {
     JLink,
     JTrace,
     Flasher,
     JLinkPro,
-
-    #[doc(hidden)]
-    __NonExhaustive(private::Private),
 }
 
 /// J-Link CPU frequency info.

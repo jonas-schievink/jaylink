@@ -3,6 +3,7 @@ use std::fmt;
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
 /// List of specific errors that may occur when using this library.
+#[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     /// A USB transport error occurred.
@@ -47,9 +48,6 @@ pub enum ErrorKind {
 
     /// An unspecified error occurred.
     Other,
-
-    #[doc(hidden)]
-    __NonExhaustive(crate::private::Private),
 }
 
 pub(crate) trait Cause {

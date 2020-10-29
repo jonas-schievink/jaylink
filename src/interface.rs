@@ -2,15 +2,13 @@ use bitflags::bitflags;
 use std::fmt;
 
 /// List of target interfaces (JTAG / SWD).
+#[non_exhaustive]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Interface {
     /// JTAG interface.
     Jtag,
     /// SWD interface (Serial Wire Debug).
     Swd,
-
-    #[doc(hidden)]
-    __NonExhaustive(crate::private::Private),
 }
 
 impl Interface {
@@ -29,7 +27,6 @@ impl Interface {
         match self {
             Interface::Jtag => 0,
             Interface::Swd => 1,
-            Interface::__NonExhaustive(_) => unreachable!(),
         }
     }
 }
@@ -39,7 +36,6 @@ impl fmt::Display for Interface {
         match self {
             Interface::Jtag => f.write_str("JTAG"),
             Interface::Swd => f.write_str("SWD"),
-            Interface::__NonExhaustive(_) => unreachable!(),
         }
     }
 }
