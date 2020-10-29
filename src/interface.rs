@@ -6,9 +6,9 @@ use std::fmt;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Interface {
     /// JTAG interface.
-    Jtag,
+    Jtag = 0,
     /// SWD interface (Serial Wire Debug).
-    Swd,
+    Swd = 1,
 }
 
 impl Interface {
@@ -24,10 +24,7 @@ impl Interface {
     }
 
     pub(crate) fn as_u8(self) -> u8 {
-        match self {
-            Interface::Jtag => 0,
-            Interface::Swd => 1,
-        }
+        self as u8
     }
 }
 
