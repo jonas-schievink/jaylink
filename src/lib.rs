@@ -1026,6 +1026,21 @@ impl JayLink {
     }
 
     /// Starts capturing SWO data in UART (NRZ) mode.
+    ///
+    /// This will switch the probe to SWD interface mode if necessary (required for SWO capture).
+    ///
+    /// Requires the [`SWO`] and [`SELECT_IF`] capabilities.
+    ///
+    /// # Parameters
+    ///
+    /// - `baudrate`: The UART baud rate to capture data at.
+    /// - `buf_size`: The size (in Bytes) of the on-device buffer to allocate for the SWO data. You
+    ///   can call [`read_max_mem_block`] to get an approximation of the available memory on the
+    ///   probe.
+    ///
+    /// [`SWO`]: struct.Capabilities.html#associatedconstant.SWO
+    /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
+    /// [`read_max_mem_block`]: #method.read_max_mem_block
     pub fn swo_start_uart<'a>(&'a mut self, baudrate: u32, buf_size: u32) -> Result<SwoStream<'a>> {
         self.require_capabilities(Capabilities::SWO)?;
 
@@ -1162,7 +1177,7 @@ pub struct SwoStream<'a> {
 impl SwoStream<'_> {
     /// Returns whether the probe-internal buffer overflowed at some point, and clears the flag.
     ///
-    /// This indicates that some device data was lost.
+    /// This indicates that some device data was lost, and should be communicated to the end-user.
     pub fn did_overrun(&self) -> bool {
         let did = self.status.get().contains(SwoStatus::OVERRUN);
         self.status.set(self.status.get() & !SwoStatus::OVERRUN);
