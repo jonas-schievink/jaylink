@@ -6,7 +6,7 @@ bitflags! {
     ///
     /// FIXME the extended capabilities are actually a 256-bit value
     struct CapabilitiesBits: u128 {
-        // 0 == Reserved
+        const RESERVED_0 = (1 << 0);  // Reserved, seems to be always set
         const GET_HW_VERSION = (1 << 1);
         const WRITE_DCC = (1 << 2);
         const ADAPTIVE_CLOCKING = (1 << 3);
@@ -21,7 +21,7 @@ bitflags! {
         const GET_HW_INFO = (1 << 12);
         const SET_KS_POWER = (1 << 13);
         const RESET_STOP_TIMED = (1 << 14);
-        // 15 = Reserved
+        // 15 = Reserved, seems to never be set
         const MEASURE_RTCK_REACT = (1 << 16);
         const SELECT_IF = (1 << 17);
         const RW_MEM_ARM79 = (1 << 18);
@@ -40,6 +40,9 @@ bitflags! {
         // For the legacy capabilities, bit 31 is documented as reserved, but it must be
         // GET_CAPS_EX, since there'd be no other way to know if GET_CAPS_EX is supported.
         const GET_CAPS_EX = (1 << 31);
+
+        // Extended capabilities
+
         const HW_JTAG_WRITE = (1 << 32);
     }
 }
@@ -99,17 +102,36 @@ impl Capabilities {
 
     /// Creates a `Capabilities` instance from 32 raw bits.
     pub(crate) fn from_raw_legacy(raw: u32) -> Self {
+        let capabilities = CapabilitiesBits::from_bits_truncate(u128::from(raw));
+        if capabilities.bits() != u128::from(raw) {
+            log::debug!(
+                "unknown capability bits: 0x{:08X} truncated to 0x{:08X} ({:?})",
+                raw,
+                capabilities.bits(),
+                capabilities,
+            );
+        }
         Self {
-            inner: CapabilitiesBits::from_bits_truncate(u128::from(raw)),
+            inner: capabilities,
         }
     }
 
     /// Creates a `Capabilities` instance from a 256-bit bitset.
     pub(crate) fn from_raw_ex(raw: [u8; 32]) -> Self {
-        let mut bits = [0; 16];
-        bits.copy_from_slice(&raw[..16]);
+        let mut bytes = [0; 16];
+        bytes.copy_from_slice(&raw[..16]);
+        let raw = u128::from_le_bytes(bytes);
+        let capabilities = CapabilitiesBits::from_bits_truncate(raw);
+        if capabilities.bits() != raw {
+            log::debug!(
+                "unknown capability bits: 0x{:08X} truncated to 0x{:08X} ({:?})",
+                raw,
+                capabilities.bits(),
+                capabilities,
+            );
+        }
         Self {
-            inner: CapabilitiesBits::from_bits_truncate(u128::from_le_bytes(bits)),
+            inner: capabilities,
         }
     }
 
@@ -134,3 +156,5 @@ impl ops::BitOr for Capabilities {
         }
     }
 }
+
+// FIXME: Split up into `Capabilities` bitset and `Capability` enum?
