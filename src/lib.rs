@@ -47,6 +47,23 @@
 //!            └───────────┘
 //! ```
 //!
+//! PIC32 ICSP pinout (not yet supported by this library):
+//!
+//! ```notrust
+//!            ┌───────────┐
+//!     VTref  │ *  1  2 * │ NC
+//!         -  │ *  3  4 * │ GND
+//!         -  │ *  5  6 * │ GND
+//!      PGED  │ *  7  8 * │ GND
+//!      PGEC ┌┘ *  9 10 * │ GND
+//!         - └┐ * 11 12 * │ GND
+//!         -  │ * 13 14 * │ GND
+//!     RESET  │ * 15 16 * │ GND
+//!         -  │ * 17 18 * │ GND
+//! 5V-Supply  │ * 19 20 * │ GND
+//!            └───────────┘
+//! ```
+//!
 //! # Reference
 //!
 //! Segger has released a PDF documenting the USB protocol: "Reference manual for J-Link USB
