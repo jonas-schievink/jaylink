@@ -227,12 +227,18 @@ pub struct JayLink {
     read_ep: u8,
     write_ep: u8,
     cmd_buf: RefCell<Vec<u8>>,
+
     /// The capabilities reported by the device. They're fetched lazily and are globally cached
     /// since they don't change while connected to the device (hopefully!).
     caps: Cell<Option<Capabilities>>,
+
     /// The currently selected target interface. This is cached to avoid unnecessary roundtrips when
     /// performing JTAG/SWD operations.
     interface: Cell<Option<Interface>>,
+
+    /// The supported interfaces. Cached in a similar manner to `caps`.
+    interfaces: Cell<Option<Interfaces>>,
+
     /// The configured interface speed. This is stored here when the user sets it. Switching
     /// interfaces will revert to the default speed, in which case this library restores the speed
     /// stored here.
@@ -429,6 +435,7 @@ impl JayLink {
             cmd_buf: RefCell::new(Vec::new()),
             caps: Cell::new(None),
             interface: Cell::new(None),
+            interfaces: Cell::new(None),
             speed: Cell::new(None),
             handle,
         })
@@ -785,15 +792,20 @@ impl JayLink {
     ///
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
     pub fn read_available_interfaces(&self) -> Result<impl Iterator<Item = Interface>> {
-        self.require_capabilities(Capabilities::SELECT_IF)?;
+        if let Some(interfaces) = self.interfaces.get() {
+            Ok(interfaces.into_iter())
+        } else {
+            self.require_capabilities(Capabilities::SELECT_IF)?;
 
-        self.write_cmd(&[Command::SelectIf as u8, 0xFF])?;
+            self.write_cmd(&[Command::SelectIf as u8, 0xFF])?;
 
-        let mut buf = [0; 4];
-        self.read(&mut buf)?;
+            let mut buf = [0; 4];
+            self.read(&mut buf)?;
 
-        let intfs = Interfaces::from_bits_warn(u32::from_le_bytes(buf));
-        Ok(intfs.into_iter())
+            let intfs = Interfaces::from_bits_warn(u32::from_le_bytes(buf));
+            self.interfaces.set(Some(intfs));
+            Ok(intfs.into_iter())
+        }
     }
 
     /// Selects the interface to use for talking to the target MCU.
