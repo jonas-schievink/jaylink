@@ -775,7 +775,7 @@ impl JayLink {
         let mut buf = [0; 4];
         self.read(&mut buf)?;
 
-        let intfs = Interfaces::from_bits_truncate(u32::from_le_bytes(buf));
+        let intfs = Interfaces::from_bits_warn(u32::from_le_bytes(buf));
         Ok(intfs.into_iter())
     }
 
