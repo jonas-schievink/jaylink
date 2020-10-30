@@ -839,14 +839,15 @@ impl JayLink {
         Ok(u16::from_le_bytes(voltage))
     }
 
-    /// Enable or disable the 5V Power supply on pin 19.
+    /// Enables or disables the 5V Power supply on pin 19.
     ///
     /// This requires the [`SET_KS_POWER`] capability.
     ///
     /// **Note**: The startup state of the power supply can be configured in non-volatile memory.
     ///
     /// **Note**: Some embedded J-Links may not provide this feature or do not have the 5V supply
-    /// routed to a pin.
+    /// routed to a pin. In that case this function might return an error, or it might return
+    /// successfully, but without doing anything.
     ///
     /// **Note**: The 5V supply is protected against overcurrent. Check the device manual for more
     /// information on this.
