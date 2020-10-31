@@ -15,6 +15,10 @@ pub enum Interface {
     Bdm3 = 2,
 
     /// FINE, a two-wire debugging interface used by Renesas RX MCUs.
+    // FIXME: There's a curious bug that hangs the probe when selecting the FINE interface.
+    // Specifically, the probe never sends back the previous interface after it receives the `c7 03`
+    // SELECT_IF cmd, even though the normal J-Link software also just sends `c7 03` and gets back
+    // the right response.
     Fine = 3,
 
     /// In-Circuit System Programming (ICSP) interface of PIC32 chips.
@@ -138,6 +142,10 @@ impl Interfaces {
             );
         }
         this
+    }
+
+    pub(crate) fn from_interface(intf: Interface) -> Self {
+        Self::from_bits(intf as u32).unwrap()
     }
 
     /// Returns an iterator over all [`Interface`]s in this bitset.
