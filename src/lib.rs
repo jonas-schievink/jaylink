@@ -762,11 +762,16 @@ impl JayLink {
     }
 
     /// Resets the target's JTAG TAP controller by temporarily asserting (n)TRST (Pin 3).
+    ///
+    /// This might not do anything if the pin is not connected to the target. It does not affect
+    /// non-JTAG target interfaces.
     pub fn reset_trst(&mut self) -> Result<()> {
         self.write_cmd(&[Command::ResetTrst as u8])
     }
 
     /// Resets the target by temporarily asserting the RESET pin (pin 15).
+    ///
+    /// This might not do anything if the RESET pin is not connected to the target.
     pub fn reset_target(&mut self) -> Result<()> {
         self.write_cmd(&[Command::ResetTarget as u8])
     }
