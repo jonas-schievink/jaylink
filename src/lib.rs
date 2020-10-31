@@ -502,10 +502,14 @@ impl JayLink {
         Ok(())
     }
 
-    fn require_capabilities(&self, cap: Capabilities) -> Result<()> {
+    fn has_capabilities(&self, cap: Capabilities) -> Result<bool> {
         let caps = self.read_capabilities()?;
 
-        if caps.contains(cap) {
+        Ok(caps.contains(cap))
+    }
+
+    fn require_capabilities(&self, cap: Capabilities) -> Result<()> {
+        if self.has_capabilities(cap)? {
             Ok(())
         } else {
             Err(Error::new(
@@ -515,10 +519,26 @@ impl JayLink {
         }
     }
 
-    fn has_capabilities(&self, cap: Capabilities) -> Result<bool> {
-        let caps = self.read_capabilities()?;
+    fn require_interface(&self, intf: Interface) -> Result<()> {
+        if intf == Interface::Jtag {
+            return Ok(()); // all J-Links support JTAG
+        }
 
-        Ok(caps.contains(cap))
+        // FIXME: clean up once `read_available_interfaces` returns `Interfaces`.
+        let _ = self.read_available_interfaces()?; // Fill cache
+        if self
+            .interfaces
+            .get()
+            .unwrap()
+            .contains(Interfaces::from_interface(intf))
+        {
+            Ok(())
+        } else {
+            Err(Error::new(
+                ErrorKind::InterfaceNotSupported,
+                format!("probe does not support target interface {:?}", intf),
+            ))
+        }
     }
 
     /// Reads the firmware version string from the device.
@@ -559,12 +579,14 @@ impl JayLink {
         Ok(HardwareVersion::from_u32(u32::from_le_bytes(buf)))
     }
 
-    /// Reads the probe's CPU speed information.
+    /// Reads the probe's communication speed information.
     ///
     /// This requires the [`SPEED_INFO`] capability.
     ///
     /// [`SPEED_INFO`]: struct.Capabilities.html#associatedconstant.SPEED_INFO
     pub fn read_speeds(&self) -> Result<Speeds> {
+        // FIXME: This needs to take an `Interface`.
+
         self.require_capabilities(Capabilities::SPEED_INFO)?;
 
         self.write_cmd(&[Command::GetSpeeds as u8])?;
@@ -792,6 +814,8 @@ impl JayLink {
     ///
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
     pub fn read_available_interfaces(&self) -> Result<impl Iterator<Item = Interface>> {
+        // FIXME: This should return `Interfaces`, not an iterator!
+
         if let Some(interfaces) = self.interfaces.get() {
             Ok(interfaces.into_iter())
         } else {
@@ -812,13 +836,16 @@ impl JayLink {
     ///
     /// This requires the [`SELECT_IF`] capability.
     ///
+    /// Note that the interface is automatically selected by the I/O methods, so this function
+    /// usually does not need to be called.
+    ///
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
     pub fn select_interface(&mut self, intf: Interface) -> Result<()> {
         if self.interface.get() == Some(intf) {
             return Ok(());
         }
 
-        self.require_capabilities(Capabilities::SELECT_IF)?;
+        self.require_interface(intf)?;
 
         self.write_cmd(&[Command::SelectIf as u8, intf.as_u8()])?;
 
@@ -1414,7 +1441,7 @@ impl Speeds {
         self.min_div
     }
 
-    /// Returns the maximum supported speed for SWD/JTAG operation (in Hz).
+    /// Returns the maximum supported speed for target communication (in Hz).
     pub fn max_speed(&self) -> u32 {
         self.base_freq / u32::from(self.min_div)
     }

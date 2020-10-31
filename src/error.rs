@@ -46,6 +46,9 @@ pub enum ErrorKind {
     /// [`Capabilities`]: struct.Capabilities.html
     MissingCapability,
 
+    /// The device does not support the selected target interface.
+    InterfaceNotSupported,
+
     /// An unspecified error occurred.
     Other,
 }
