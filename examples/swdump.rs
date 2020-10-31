@@ -22,7 +22,7 @@
 
 use jaylink::{CommunicationSpeed, JayLink};
 use log::trace;
-use std::cmp;
+use std::{cmp, fmt};
 use structopt::StructOpt;
 
 const IDLE_CYCLES_BEFORE_ACCESS: usize = 2;
@@ -43,7 +43,7 @@ fn main() {
 
     let opts = Opts::from_args();
     if let Err(e) = run(opts) {
-        eprintln!("error: {:?}", e);
+        eprintln!("error: {}", e);
         std::process::exit(1);
     }
 }
@@ -65,6 +65,17 @@ enum SwdError {
 impl From<jaylink::Error> for SwdError {
     fn from(e: jaylink::Error) -> Self {
         SwdError::Probe(e)
+    }
+}
+
+impl fmt::Display for SwdError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SwdError::Probe(e) => e.fmt(f),
+            SwdError::Fault => f.write_str("target returned FAULT response"),
+            SwdError::NoResponse => f.write_str("no response from target chip"),
+            SwdError::Parity => f.write_str("SWD parity error"),
+        }
     }
 }
 
@@ -149,9 +160,8 @@ impl JayLinkExt for JayLink {
         swdio.push(false); // ACK
         swdio.push(false); // ACK
 
-        for _ in 0..32 {
-            swdio.push(false); // 32 bits of read data
-        }
+        // 32 bits of read data
+        swdio.resize(swdio.len() + 32, false);
         swdio.push(false); // parity
 
         dir.resize(dir.len() + 3 + 33, false); // read
