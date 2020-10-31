@@ -121,13 +121,19 @@ impl Capabilities {
 
     /// Creates a `Capabilities` instance from a 256-bit bitset.
     pub(crate) fn from_raw_ex(raw: [u8; 32]) -> Self {
+        if raw[16..] != [0; 16] {
+            log::debug!(
+                "unknown ext. capability bits: dropping high 16 bytes {:02X?}",
+                &raw[16..],
+            );
+        }
         let mut bytes = [0; 16];
         bytes.copy_from_slice(&raw[..16]);
         let raw = u128::from_le_bytes(bytes);
         let mut capabilities = CapabilitiesBits::from_bits_truncate(raw);
         if capabilities.bits() != raw {
             log::debug!(
-                "unknown capability bits: 0x{:08X} truncated to 0x{:08X} ({:?})",
+                "unknown ext. capability bits: 0x{:08X} truncated to 0x{:08X} ({:?})",
                 raw,
                 capabilities.bits(),
                 capabilities,
