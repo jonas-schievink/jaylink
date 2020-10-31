@@ -238,11 +238,6 @@ pub struct JayLink {
     /// when performing target I/O operations.
     interface: Interface,
 
-    /// The configured interface speed. This is stored here when the user sets it. Switching
-    /// interfaces will revert to the default speed, in which case this library restores the speed
-    /// stored here.
-    speed: Option<CommunicationSpeed>,
-
     manufacturer: String,
     product: String,
     serial: String,
@@ -435,12 +430,15 @@ impl JayLink {
             caps: Capabilities::from_raw_legacy(0), // dummy value
             interface: Interface::Jtag,
             interfaces: Interfaces::from_bits_warn(0), // dummy value
-            speed: None,
             handle,
         };
         this.fill_capabilities()?;
         this.fill_interfaces()?;
         this.fill_current_interface()?;
+
+        // Probes remember the selected interface, so provide consistent defaults to avoid
+        // unreliable apps.
+        this.select_interface(Interface::Jtag)?;
 
         Ok(this)
     }
@@ -589,13 +587,24 @@ impl JayLink {
         }
     }
 
-    fn require_interface(&self, intf: Interface) -> Result<()> {
+    fn require_interface_supported(&self, intf: Interface) -> Result<()> {
         if self.interfaces.contains(intf) {
             Ok(())
         } else {
             Err(Error::new(
                 ErrorKind::InterfaceNotSupported,
                 format!("probe does not support target interface {:?}", intf),
+            ))
+        }
+    }
+
+    fn require_interface_selected(&self, intf: Interface) -> Result<()> {
+        if self.interface == intf {
+            Ok(())
+        } else {
+            Err(Error::new(
+                ErrorKind::Other,
+                format!("interface {:?} must be selected for this operation (currently using interface {:?})", intf, self.interface),
             ))
         }
     }
@@ -749,16 +758,20 @@ impl JayLink {
     ///
     /// This requires the [`SELECT_IF`] capability.
     ///
+    /// Switching interfaces will reset the configured transfer speed, so [`set_speed`] needs to be
+    /// called *after* `select_interface`.
+    ///
     /// Note that the interface is automatically selected by the I/O methods, so this function
     /// usually does not need to be called.
     ///
+    /// [`set_speed`]: #method.set_speed
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
     pub fn select_interface(&mut self, intf: Interface) -> Result<()> {
         if self.interface == intf {
             return Ok(());
         }
 
-        self.require_interface(intf)?;
+        self.require_interface_supported(intf)?;
 
         self.write_cmd(&[Command::SelectIf as u8, intf.as_u8()])?;
 
@@ -767,11 +780,6 @@ impl JayLink {
         self.read(&mut buf)?;
 
         self.interface = intf;
-
-        if let Some(speed) = self.speed {
-            // Restore previously configured comm speed
-            self.set_speed(speed)?;
-        }
 
         Ok(())
     }
@@ -862,8 +870,12 @@ impl JayLink {
     /// capability is required. Note that adaptive clocking may not work for all target interfaces
     /// (eg. SWD).
     ///
+    /// When the selected target interface is switched (by calling [`select_interface`]), the
+    /// communication speed is reset to some unspecified default value.
+    ///
     /// [`CommunicationSpeed::ADAPTIVE`]: struct.CommunicationSpeed.html#associatedconstant.ADAPTIVE
     /// [`ADAPTIVE_CLOCKING`]: struct.Capabilities.html#associatedconstant.ADAPTIVE_CLOCKING
+    /// [`select_interface`]: #method.select_interface
     pub fn set_speed(&mut self, speed: CommunicationSpeed) -> Result<()> {
         if speed.raw == CommunicationSpeed::ADAPTIVE.raw {
             self.require_capabilities(Capabilities::ADAPTIVE_CLOCKING)?;
@@ -872,8 +884,6 @@ impl JayLink {
         let mut buf = [Command::SetSpeed as u8, 0, 0];
         buf[1..3].copy_from_slice(&speed.raw.to_le_bytes());
         self.write_cmd(&buf)?;
-
-        self.speed = Some(speed);
 
         Ok(())
     }
@@ -934,6 +944,8 @@ impl JayLink {
         M: IntoIterator<Item = bool>,
         D: IntoIterator<Item = bool>,
     {
+        self.require_interface_selected(Interface::Jtag)?;
+
         let mut has_status_byte = false;
         // There's 3 commands for doing a JTAG transfer. The older 2 are obsolete with hardware
         // version 5 and above, which adds the 3rd command. Unfortunately we cannot reliably use the
@@ -1005,9 +1017,10 @@ impl JayLink {
 
     /// Performs an SWD I/O operation.
     ///
-    /// This will put the probe in SWD mode if it isn't already in that mode.
+    /// This requires the [`SELECT_IF`] capability and support for [`Interface::Swd`].
     ///
-    /// This requires the [`SELECT_IF`] capability.
+    /// The caller must ensure that the probe is in SWD mode by calling
+    /// [`select_interface`]`(`[`Interface::Swd`]`)`.
     ///
     /// # Parameters
     ///
@@ -1023,6 +1036,8 @@ impl JayLink {
     /// `dir` = `true`) are undefined, and bits that were read from the target (`dir` = `false`)
     /// will have whatever value the target sent.
     ///
+    /// [`select_interface`]: #method.select_interface
+    /// [`Interface::Swd`]: enum.Interface.html#variant.Swd
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
     // NB: Explicit `'a` lifetime used to improve rustdoc output
     pub fn swd_io<'a, D, S>(&'a mut self, dir: D, swdio: S) -> Result<BitIter<'a>>
@@ -1030,7 +1045,7 @@ impl JayLink {
         D: IntoIterator<Item = bool>,
         S: IntoIterator<Item = bool>,
     {
-        self.select_interface(Interface::Swd)?;
+        self.require_interface_selected(Interface::Swd)?;
 
         // Collect the bit iterators into the buffer. We don't know the length in advance.
         let dir = dir.into_iter();

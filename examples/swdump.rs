@@ -20,7 +20,7 @@
 //!
 //! This example assumes that the above "bug" (or misspecification?) is present.
 
-use jaylink::{CommunicationSpeed, JayLink};
+use jaylink::{CommunicationSpeed, Interface, JayLink};
 use log::trace;
 use std::{cmp, fmt};
 use structopt::StructOpt;
@@ -289,6 +289,8 @@ impl JayLinkExt for JayLink {
 
 fn run(opts: Opts) -> Result<(), SwdError> {
     let mut probe = JayLink::open_by_serial(opts.serial.as_deref())?;
+
+    probe.select_interface(Interface::Swd)?;
 
     // Limit speed so invalid 0xffff doesn't appear
     let khz = cmp::min(opts.speed.unwrap_or(200), 0xfffe);
