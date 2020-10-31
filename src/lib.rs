@@ -234,9 +234,9 @@ pub struct JayLink {
     /// The supported interfaces. Like `caps`, this is fetched once when opening the device.
     interfaces: Interfaces,
 
-    /// The currently selected target interface. This is cached to avoid unnecessary roundtrips when
-    /// performing JTAG/SWD operations.
-    interface: Cell<Option<Interface>>,
+    /// The currently selected target interface. This is stored here to avoid unnecessary roundtrips
+    /// when performing target I/O operations.
+    interface: Interface,
 
     /// The configured interface speed. This is stored here when the user sets it. Switching
     /// interfaces will revert to the default speed, in which case this library restores the speed
@@ -433,13 +433,14 @@ impl JayLink {
             write_ep,
             cmd_buf: RefCell::new(Vec::new()),
             caps: Capabilities::from_raw_legacy(0), // dummy value
-            interface: Cell::new(None),
+            interface: Interface::Jtag,
             interfaces: Interfaces::from_bits_warn(0), // dummy value
             speed: None,
             handle,
         };
         this.fill_capabilities()?;
         this.fill_interfaces()?;
+        this.fill_current_interface()?;
 
         Ok(this)
     }
@@ -486,8 +487,6 @@ impl JayLink {
             return Ok(());
         }
 
-        self.require_capabilities(Capabilities::SELECT_IF)?;
-
         self.write_cmd(&[Command::SelectIf as u8, 0xFF])?;
 
         let mut buf = [0; 4];
@@ -495,6 +494,26 @@ impl JayLink {
 
         let intfs = Interfaces::from_bits_warn(u32::from_le_bytes(buf));
         self.interfaces = intfs;
+        Ok(())
+    }
+
+    fn fill_current_interface(&mut self) -> Result<()> {
+        if !self.capabilities().contains(Capabilities::SELECT_IF) {
+            // Pre-SELECT_IF probes only support JTAG.
+            return Ok(());
+        }
+
+        self.write_cmd(&[Command::SelectIf as u8, 0xFE])?;
+
+        let mut buf = [0; 4];
+        self.read(&mut buf)?;
+
+        let raw = u32::from_le_bytes(buf);
+        let intf = Interface::from_u32(raw)
+            .ok_or_else(|| format!("invalid interface value {}", raw))
+            .jaylink_err()?;
+        debug!("read active interface: {:?}", intf);
+        self.interface = intf;
         Ok(())
     }
 
@@ -713,6 +732,17 @@ impl JayLink {
         self.interfaces
     }
 
+    /// Reads the currently selected target interface.
+    ///
+    /// **Note**: There is no guarantee that the returned interface is actually supported (ie. it
+    /// might not be in the list returned by [`available_interfaces`]). In particular, some
+    /// embedded J-Link probes start up with JTAG selected, but only support SWD.
+    ///
+    /// [`available_interfaces`]: #method.available_interfaces
+    pub fn current_interface(&self) -> Interface {
+        self.interface
+    }
+
     /// Changes the state of the TMS / SWDIO pin (pin 7).
     ///
     /// The pin will be set to the level of `VTref` if `tms` is `true`, and to GND if it is `false`.
@@ -793,37 +823,6 @@ impl JayLink {
         self.write_cmd(&[Command::ResetTarget as u8])
     }
 
-    /// Reads the currently selected target interface.
-    ///
-    /// This requires the [`SELECT_IF`] capability.
-    ///
-    /// **Note**: There is no guarantee that the returned interface is actually supported (ie. it
-    /// might not be in the list returned by [`read_available_interfaces`]). In particular, some
-    /// embedded J-Link probes start up with JTAG selected, but only support SWD.
-    ///
-    /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
-    /// [`read_available_interfaces`]: #method.read_available_interfaces
-    pub fn read_current_interface(&self) -> Result<Interface> {
-        if let Some(intf) = self.interface.get() {
-            Ok(intf)
-        } else {
-            self.require_capabilities(Capabilities::SELECT_IF)?;
-
-            self.write_cmd(&[Command::SelectIf as u8, 0xFE])?;
-
-            let mut buf = [0; 4];
-            self.read(&mut buf)?;
-
-            let raw = u32::from_le_bytes(buf);
-            let intf = Interface::from_u32(raw)
-                .ok_or_else(|| format!("invalid interface value {}", raw))
-                .jaylink_err()?;
-            debug!("read active interface: {:?}", intf);
-            self.interface.set(Some(intf));
-            Ok(intf)
-        }
-    }
-
     /// Selects the interface to use for talking to the target MCU.
     ///
     /// This requires the [`SELECT_IF`] capability.
@@ -833,7 +832,7 @@ impl JayLink {
     ///
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
     pub fn select_interface(&mut self, intf: Interface) -> Result<()> {
-        if self.interface.get() == Some(intf) {
+        if self.interface == intf {
             return Ok(());
         }
 
@@ -845,7 +844,7 @@ impl JayLink {
         let mut buf = [0; 4];
         self.read(&mut buf)?;
 
-        self.interface.set(Some(intf));
+        self.interface = intf;
 
         if let Some(speed) = self.speed {
             // Restore previously configured comm speed

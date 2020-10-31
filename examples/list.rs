@@ -78,7 +78,7 @@ fn detailed_info(dev: &JayLink) -> Result<String> {
     let speeds = dev.read_speeds()?;
     let swo_speeds = dev.read_swo_speeds(SwoMode::Uart)?;
     let max_mem_block = dev.read_max_mem_block()?;
-    let intf = dev.read_current_interface()?;
+    let intf = dev.current_interface();
     let avail_intfs = dev
         .available_interfaces()
         .into_iter()
