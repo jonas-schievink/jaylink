@@ -81,6 +81,7 @@ fn detailed_info(dev: &JayLink) -> Result<String> {
     let intf = dev.read_current_interface()?;
     let avail_intfs = dev
         .read_available_interfaces()?
+        .into_iter()
         .map(|intf| intf.to_string())
         .collect::<Vec<_>>()
         .join(", ");

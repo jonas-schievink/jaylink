@@ -1,79 +1,85 @@
+#![allow(non_upper_case_globals)]
+
 use bitflags::bitflags;
 use std::fmt;
 
-/// List of target interfaces (JTAG / SWD).
-#[non_exhaustive]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Interface {
-    /// JTAG interface.
+macro_rules! define_interfaces {
+    (
+        $(
+            $( #[$attr:meta] )*
+            $name:ident = $id:expr,
+        )+
+    ) => {
+        /// List of target interfaces.
+        ///
+        /// Note that this library might not support all of them, despite listing them here.
+        #[non_exhaustive]
+        #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+        pub enum Interface {
+            $(
+                $( #[$attr] )*
+                $name = $id,
+            )+
+        }
+
+        impl Interface {
+            const ALL: &'static [Self] = &[
+                $( Self::$name ),+
+            ];
+
+            pub(crate) fn from_u32(raw: u32) -> Option<Self> {
+                match raw {
+                    $(
+                        $id => Some(Self::$name),
+                    )+
+                    _ => None,
+                }
+            }
+        }
+
+        bitflags! {
+            struct InterfaceFlags: u32 {
+                $(
+                    const $name = 1 << $id;
+                )+
+            }
+        }
+    };
+}
+
+define_interfaces!(
+    /// JTAG interface (IEEE 1149.1). Supported by all J-Link probes.
     Jtag = 0,
-
-    /// SWD interface (Serial Wire Debug), used by most Cortex-M chips.
+    /// SWD interface (Serial Wire Debug), used by most Cortex-M chips, and supported by almost all
+    /// J-Link probes.
     Swd = 1,
-
-    /// Background Debug Mode 3.
+    /// Background Debug Mode 3, a single-wire debug interface used on some NXP microcontrollers.
     Bdm3 = 2,
-
     /// FINE, a two-wire debugging interface used by Renesas RX MCUs.
     // FIXME: There's a curious bug that hangs the probe when selecting the FINE interface.
     // Specifically, the probe never sends back the previous interface after it receives the `c7 03`
     // SELECT_IF cmd, even though the normal J-Link software also just sends `c7 03` and gets back
     // the right response.
     Fine = 3,
-
     /// In-Circuit System Programming (ICSP) interface of PIC32 chips.
     Pic32Icsp = 4,
-
     /// Serial Peripheral Interface (for SPI Flash programming).
     Spi = 5,
-
     /// Silicon Labs' 2-wire debug interface.
     C2 = 6,
-
     /// [cJTAG], or compact JTAG, as specified in IEEE 1149.7.
     ///
     /// [cJTAG]: https://wiki.segger.com/J-Link_cJTAG_specifics.
     CJtag = 7,
-
     /// 2-wire debugging interface used by Microchip's IS208x MCUs.
     Mc2WireJtag = 10,
     // (*)
     // NOTE: When changing this enum, also change all other places with a (*) in addition to
     // anything that fails to compile.
     // NOTE 2: Keep the docs in sync with the bitflags below!
-}
+);
 
 impl Interface {
-    const ALL: &'static [Self] = &[
-        Self::Jtag,
-        Self::Swd,
-        Self::Bdm3,
-        Self::Fine,
-        Self::Pic32Icsp,
-        Self::Spi,
-        Self::C2,
-        Self::CJtag,
-        Self::Mc2WireJtag,
-        // (*)
-    ];
-
-    pub(crate) fn from_u32(raw: u32) -> Option<Self> {
-        // Indices must match bit positions in `Interfaces`.
-        match raw {
-            0 => Some(Interface::Jtag),
-            1 => Some(Interface::Swd),
-            2 => Some(Interface::Bdm3),
-            3 => Some(Interface::Fine),
-            4 => Some(Interface::Pic32Icsp),
-            5 => Some(Interface::Spi),
-            6 => Some(Interface::C2),
-            7 => Some(Interface::CJtag),
-            10 => Some(Interface::Mc2WireJtag),
-            // (*)
-            _ => None,
-        }
-    }
-
     pub(crate) fn as_u8(self) -> u8 {
         self as u8
     }
@@ -95,69 +101,39 @@ impl fmt::Display for Interface {
     }
 }
 
-bitflags! {
-    /// Bitset of supported target interfaces.
-    pub struct Interfaces: u32 {
-        /// JTAG interface.
-        const JTAG = 1 << 0;
-
-        /// SWD interface (Serial Wire Debug), used by most Cortex-M chips.
-        const SWD = 1 << 1;
-
-        /// Background Debug Mode 3.
-        const BDM3 = 1 << 2;
-
-        /// FINE, a two-wire debugging interface used by Renesas RX MCUs.
-        const FINE = 1 << 3;
-
-        /// In-Circuit System Programming (ICSP) interface of PIC32 chips.
-        const PIC32_ICSP = 1 << 4;
-
-        /// Serial Peripheral Interface.
-        const SPI = 1 << 5;
-
-        /// Silicon Labs' 2-wire debug interface.
-        const C2 = 1 << 6;
-
-        /// [cJTAG], or compact JTAG, as specified in IEEE 1149.7.
-        ///
-        /// [cJTAG]: https://wiki.segger.com/J-Link_cJTAG_specifics.
-        const CJTAG = 1 << 7;
-
-        /// 2-wire debugging interface used by Microchip's IS208x MCUs.
-        const MC_2WIRE_JTAG = 1 << 10;
-        // (*)
-    }
-}
+/// A set of supported target interfaces.
+///
+/// This implements `IntoIterator`, so you can call `.into_iter()` to iterate over the contained
+/// [`Interface`]s.
+///
+/// [`Interface`]: enum.Interface.html
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct Interfaces(InterfaceFlags);
 
 impl Interfaces {
     pub(crate) fn from_bits_warn(raw: u32) -> Self {
-        let this = Self::from_bits_truncate(raw);
-        if this.bits() != raw {
+        let flags = InterfaceFlags::from_bits_truncate(raw);
+        if flags.bits() != raw {
             log::debug!(
                 "unknown bits in interface mask: 0x{:08X} truncated to 0x{:08X} ({:?})",
                 raw,
-                this.bits(),
-                this,
+                flags.bits(),
+                flags,
             );
         }
-        this
+        Self(flags)
     }
 
-    pub(crate) fn from_interface(intf: Interface) -> Self {
-        Self::from_bits(intf as u32).unwrap()
+    /// Returns whether `interface` is contained in `self`.
+    pub fn contains(&self, interface: Interface) -> bool {
+        self.0
+            .contains(InterfaceFlags::from_bits(1 << interface as u32).unwrap())
     }
+}
 
-    /// Returns an iterator over all [`Interface`]s in this bitset.
-    ///
-    /// [`Interface`]: enum.Interface.html
-    #[allow(clippy::should_implement_trait)]
-    pub fn into_iter(self) -> InterfaceIter {
-        // FIXME: Rename to `.iter()`
-        InterfaceIter {
-            interfaces: self,
-            next: 0,
-        }
+impl fmt::Debug for Interfaces {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -166,7 +142,10 @@ impl IntoIterator for Interfaces {
     type IntoIter = InterfaceIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.into_iter()
+        InterfaceIter {
+            interfaces: self,
+            next: 0,
+        }
     }
 }
 
@@ -184,10 +163,7 @@ impl Iterator for InterfaceIter {
         loop {
             let next = Interface::ALL.get(self.next)?;
             self.next += 1;
-            if self
-                .interfaces
-                .contains(Interfaces::from_bits(1 << next.as_u8()).unwrap())
-            {
+            if self.interfaces.contains(*next) {
                 return Some(*next);
             }
         }
@@ -200,22 +176,29 @@ mod tests {
 
     #[test]
     fn iter() {
-        assert_eq!(Interfaces::empty().into_iter().collect::<Vec<_>>(), &[]);
         assert_eq!(
-            Interfaces::JTAG.into_iter().collect::<Vec<_>>(),
+            Interfaces(InterfaceFlags::empty())
+                .into_iter()
+                .collect::<Vec<_>>(),
+            &[]
+        );
+        assert_eq!(
+            Interfaces(InterfaceFlags::Jtag)
+                .into_iter()
+                .collect::<Vec<_>>(),
             &[Interface::Jtag]
         );
         assert_eq!(
-            Interfaces::SWD.into_iter().collect::<Vec<_>>(),
+            Interfaces(InterfaceFlags::Swd)
+                .into_iter()
+                .collect::<Vec<_>>(),
             &[Interface::Swd]
         );
         assert_eq!(
-            (Interfaces::JTAG | Interfaces::SWD)
+            Interfaces(InterfaceFlags::Jtag | InterfaceFlags::Swd)
                 .into_iter()
                 .collect::<Vec<_>>(),
             &[Interface::Jtag, Interface::Swd]
         );
     }
 }
-
-// FIXME: make bitfields-generated struct private

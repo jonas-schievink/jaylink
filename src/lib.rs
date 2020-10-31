@@ -524,14 +524,8 @@ impl JayLink {
             return Ok(()); // all J-Links support JTAG
         }
 
-        // FIXME: clean up once `read_available_interfaces` returns `Interfaces`.
-        let _ = self.read_available_interfaces()?; // Fill cache
-        if self
-            .interfaces
-            .get()
-            .unwrap()
-            .contains(Interfaces::from_interface(intf))
-        {
+        let interfaces = self.read_available_interfaces()?; // Fill cache
+        if interfaces.contains(intf) {
             Ok(())
         } else {
             Err(Error::new(
@@ -813,11 +807,9 @@ impl JayLink {
     /// This requires the [`SELECT_IF`] capability.
     ///
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
-    pub fn read_available_interfaces(&self) -> Result<impl Iterator<Item = Interface>> {
-        // FIXME: This should return `Interfaces`, not an iterator!
-
+    pub fn read_available_interfaces(&self) -> Result<Interfaces> {
         if let Some(interfaces) = self.interfaces.get() {
-            Ok(interfaces.into_iter())
+            Ok(interfaces)
         } else {
             self.require_capabilities(Capabilities::SELECT_IF)?;
 
@@ -828,7 +820,7 @@ impl JayLink {
 
             let intfs = Interfaces::from_bits_warn(u32::from_le_bytes(buf));
             self.interfaces.set(Some(intfs));
-            Ok(intfs.into_iter())
+            Ok(intfs)
         }
     }
 
@@ -866,7 +858,8 @@ impl JayLink {
     /// Sets the target communication speed.
     ///
     /// If `speed` is set to [`CommunicationSpeed::ADAPTIVE`], then the [`ADAPTIVE_CLOCKING`]
-    /// capability is required.
+    /// capability is required. Note that adaptive clocking may not work for all target interfaces
+    /// (eg. SWD).
     ///
     /// [`CommunicationSpeed::ADAPTIVE`]: struct.CommunicationSpeed.html#associatedconstant.ADAPTIVE
     /// [`ADAPTIVE_CLOCKING`]: struct.Capabilities.html#associatedconstant.ADAPTIVE_CLOCKING
