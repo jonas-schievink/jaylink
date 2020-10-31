@@ -103,7 +103,7 @@ impl Capabilities {
 
     /// Creates a `Capabilities` instance from 32 raw bits.
     pub(crate) fn from_raw_legacy(raw: u32) -> Self {
-        let capabilities = CapabilitiesBits::from_bits_truncate(u128::from(raw));
+        let mut capabilities = CapabilitiesBits::from_bits_truncate(u128::from(raw));
         if capabilities.bits() != u128::from(raw) {
             log::debug!(
                 "unknown capability bits: 0x{:08X} truncated to 0x{:08X} ({:?})",
@@ -112,6 +112,8 @@ impl Capabilities {
                 capabilities,
             );
         }
+        // Hide reserved bits from user-facing output.
+        capabilities.remove(CapabilitiesBits::RESERVED_0);
         Self {
             inner: capabilities,
         }
@@ -122,7 +124,7 @@ impl Capabilities {
         let mut bytes = [0; 16];
         bytes.copy_from_slice(&raw[..16]);
         let raw = u128::from_le_bytes(bytes);
-        let capabilities = CapabilitiesBits::from_bits_truncate(raw);
+        let mut capabilities = CapabilitiesBits::from_bits_truncate(raw);
         if capabilities.bits() != raw {
             log::debug!(
                 "unknown capability bits: 0x{:08X} truncated to 0x{:08X} ({:?})",
@@ -131,6 +133,8 @@ impl Capabilities {
                 capabilities,
             );
         }
+        // Hide reserved bits from user-facing output.
+        capabilities.remove(CapabilitiesBits::RESERVED_0);
         Self {
             inner: capabilities,
         }
