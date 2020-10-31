@@ -44,6 +44,7 @@ bitflags! {
         // Extended capabilities
 
         const HW_JTAG_WRITE = (1 << 32);
+        const COM = (1 << 33);
     }
 }
 
