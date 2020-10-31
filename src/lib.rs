@@ -638,14 +638,16 @@ impl JayLink {
         Ok(HardwareVersion::from_u32(u32::from_le_bytes(buf)))
     }
 
-    /// Reads the probe's communication speed information.
+    /// Reads the probe's communication speed information about the currently selected interface.
+    ///
+    /// Supported speeds may differ between [`Interface`]s, so the right interface needs to be
+    /// selected for the returned value to make sense.
     ///
     /// This requires the [`SPEED_INFO`] capability.
     ///
+    /// [`Interface`]: enum.Interface.html
     /// [`SPEED_INFO`]: struct.Capabilities.html#associatedconstant.SPEED_INFO
     pub fn read_speeds(&self) -> Result<Speeds> {
-        // FIXME: This needs to take an `Interface`.
-
         self.require_capabilities(Capabilities::SPEED_INFO)?;
 
         self.write_cmd(&[Command::GetSpeeds as u8])?;
@@ -743,6 +745,37 @@ impl JayLink {
         self.interface
     }
 
+    /// Selects the interface to use for talking to the target MCU.
+    ///
+    /// This requires the [`SELECT_IF`] capability.
+    ///
+    /// Note that the interface is automatically selected by the I/O methods, so this function
+    /// usually does not need to be called.
+    ///
+    /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
+    pub fn select_interface(&mut self, intf: Interface) -> Result<()> {
+        if self.interface == intf {
+            return Ok(());
+        }
+
+        self.require_interface(intf)?;
+
+        self.write_cmd(&[Command::SelectIf as u8, intf.as_u8()])?;
+
+        // Returns the previous interface, ignore it
+        let mut buf = [0; 4];
+        self.read(&mut buf)?;
+
+        self.interface = intf;
+
+        if let Some(speed) = self.speed {
+            // Restore previously configured comm speed
+            self.set_speed(speed)?;
+        }
+
+        Ok(())
+    }
+
     /// Changes the state of the TMS / SWDIO pin (pin 7).
     ///
     /// The pin will be set to the level of `VTref` if `tms` is `true`, and to GND if it is `false`.
@@ -821,37 +854,6 @@ impl JayLink {
     /// This might not do anything if the RESET pin is not connected to the target.
     pub fn reset_target(&mut self) -> Result<()> {
         self.write_cmd(&[Command::ResetTarget as u8])
-    }
-
-    /// Selects the interface to use for talking to the target MCU.
-    ///
-    /// This requires the [`SELECT_IF`] capability.
-    ///
-    /// Note that the interface is automatically selected by the I/O methods, so this function
-    /// usually does not need to be called.
-    ///
-    /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
-    pub fn select_interface(&mut self, intf: Interface) -> Result<()> {
-        if self.interface == intf {
-            return Ok(());
-        }
-
-        self.require_interface(intf)?;
-
-        self.write_cmd(&[Command::SelectIf as u8, intf.as_u8()])?;
-
-        // Returns the previous interface, ignore it
-        let mut buf = [0; 4];
-        self.read(&mut buf)?;
-
-        self.interface = intf;
-
-        if let Some(speed) = self.speed {
-            // Restore previously configured comm speed
-            self.set_speed(speed)?;
-        }
-
-        Ok(())
     }
 
     /// Sets the target communication speed.
