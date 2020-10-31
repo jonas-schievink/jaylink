@@ -242,7 +242,7 @@ pub struct JayLink {
     /// The configured interface speed. This is stored here when the user sets it. Switching
     /// interfaces will revert to the default speed, in which case this library restores the speed
     /// stored here.
-    speed: Cell<Option<CommunicationSpeed>>,
+    speed: Option<CommunicationSpeed>,
 
     manufacturer: String,
     product: String,
@@ -436,7 +436,7 @@ impl JayLink {
             caps: Cell::new(None),
             interface: Cell::new(None),
             interfaces: Cell::new(None),
-            speed: Cell::new(None),
+            speed: None,
             handle,
         })
     }
@@ -852,7 +852,7 @@ impl JayLink {
 
         self.interface.set(Some(intf));
 
-        if let Some(speed) = self.speed.get() {
+        if let Some(speed) = self.speed {
             // Restore previously configured comm speed
             self.set_speed(speed)?;
         }
@@ -877,7 +877,7 @@ impl JayLink {
         buf[1..3].copy_from_slice(&speed.raw.to_le_bytes());
         self.write_cmd(&buf)?;
 
-        self.speed.set(Some(speed));
+        self.speed = Some(speed);
 
         Ok(())
     }
