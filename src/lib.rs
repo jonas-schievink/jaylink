@@ -228,9 +228,8 @@ pub struct JayLink {
     write_ep: u8,
     cmd_buf: RefCell<Vec<u8>>,
 
-    /// The capabilities reported by the device. They're fetched lazily and are globally cached
-    /// since they don't change while connected to the device (hopefully!).
-    caps: Cell<Option<Capabilities>>,
+    /// The capabilities reported by the device. They're fetched once, when the device is opened.
+    caps: Capabilities,
 
     /// The currently selected target interface. This is cached to avoid unnecessary roundtrips when
     /// performing JTAG/SWD operations.
@@ -422,7 +421,7 @@ impl JayLink {
             return Err("another application is accessing the device".to_string()).jaylink_err();
         }
 
-        Ok(Self {
+        let mut this = Self {
             manufacturer: handle
                 .read_manufacturer_string_ascii(&descr)
                 .jaylink_err()?,
@@ -433,12 +432,50 @@ impl JayLink {
             read_ep,
             write_ep,
             cmd_buf: RefCell::new(Vec::new()),
-            caps: Cell::new(None),
+            caps: Capabilities::from_raw_legacy(0), // dummy value
             interface: Cell::new(None),
             interfaces: Cell::new(None),
             speed: None,
             handle,
-        })
+        };
+        this.fill_capabilities()?;
+
+        Ok(this)
+    }
+
+    /// Reads the advertised capabilities from the device.
+    fn fill_capabilities(&mut self) -> Result<()> {
+        self.write_cmd(&[Command::GetCaps as u8])?;
+
+        let mut buf = [0; 4];
+        self.read(&mut buf)?;
+
+        let mut caps = Capabilities::from_raw_legacy(u32::from_le_bytes(buf));
+        debug!("legacy caps: {:?}", caps);
+
+        // If the `GET_CAPS_EX` capability is set, use the extended capability command to fetch
+        // all the capabilities.
+        if caps.contains(Capabilities::GET_CAPS_EX) {
+            self.write_cmd(&[Command::GetCapsEx as u8])?;
+
+            let mut buf = [0; 32];
+            self.read(&mut buf)?;
+            let real_caps = Capabilities::from_raw_ex(buf);
+            if !real_caps.contains(caps) {
+                return Err(format!(
+                    "ext. caps are not a superset of legacy caps (legacy: {:?}, ex: {:?})",
+                    caps, real_caps
+                ))
+                .jaylink_err();
+            }
+            debug!("extended caps: {:?}", real_caps);
+            caps = real_caps;
+        } else {
+            debug!("extended caps not supported");
+        }
+
+        self.caps = caps;
+        Ok(())
     }
 
     /// Returns the manufacturer string stored in the device descriptor.
@@ -502,14 +539,8 @@ impl JayLink {
         Ok(())
     }
 
-    fn has_capabilities(&self, cap: Capabilities) -> Result<bool> {
-        let caps = self.read_capabilities()?;
-
-        Ok(caps.contains(cap))
-    }
-
     fn require_capabilities(&self, cap: Capabilities) -> Result<()> {
-        if self.has_capabilities(cap)? {
+        if self.capabilities().contains(cap) {
             Ok(())
         } else {
             Err(Error::new(
@@ -657,43 +688,9 @@ impl JayLink {
         Ok(u32::from_le_bytes(buf))
     }
 
-    /// Reads the advertised capabilities from the device.
-    pub fn read_capabilities(&self) -> Result<Capabilities> {
-        if let Some(caps) = self.caps.get() {
-            Ok(caps)
-        } else {
-            self.write_cmd(&[Command::GetCaps as u8])?;
-
-            let mut buf = [0; 4];
-            self.read(&mut buf)?;
-
-            let mut caps = Capabilities::from_raw_legacy(u32::from_le_bytes(buf));
-            debug!("legacy caps: {:?}", caps);
-
-            // If the `GET_CAPS_EX` capability is set, use the extended capability command to fetch
-            // all the capabilities.
-            if caps.contains(Capabilities::GET_CAPS_EX) {
-                self.write_cmd(&[Command::GetCapsEx as u8])?;
-
-                let mut buf = [0; 32];
-                self.read(&mut buf)?;
-                let real_caps = Capabilities::from_raw_ex(buf);
-                if !real_caps.contains(caps) {
-                    return Err(format!(
-                        "ext. caps are not a superset of legacy caps (legacy: {:?}, ex: {:?})",
-                        caps, real_caps
-                    ))
-                    .jaylink_err();
-                }
-                debug!("extended caps: {:?}", real_caps);
-                caps = real_caps;
-            } else {
-                debug!("extended caps not supported");
-            }
-
-            self.caps.set(Some(caps));
-            Ok(caps)
-        }
+    /// Returns capabilities advertised by the device.
+    pub fn capabilities(&self) -> Capabilities {
+        self.caps
     }
 
     /// Changes the state of the TMS / SWDIO pin (pin 7).
@@ -943,7 +940,7 @@ impl JayLink {
         // version 5 and above, which adds the 3rd command. Unfortunately we cannot reliably use the
         // HW version to determine this since some embedded J-Link probes have a HW version of
         // 1.0.0, but still support SWD, so we use the `SELECT_IF` capability instead.
-        let cmd = if self.has_capabilities(Capabilities::SELECT_IF)? {
+        let cmd = if self.capabilities().contains(Capabilities::SELECT_IF) {
             // Use the new JTAG3 command, make sure to select the JTAG interface mode
             self.select_interface(Interface::Jtag)?;
             has_status_byte = true;

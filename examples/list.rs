@@ -72,7 +72,7 @@ fn run() -> Result<()> {
 }
 
 fn detailed_info(dev: &JayLink) -> Result<String> {
-    let caps = dev.read_capabilities()?;
+    let caps = dev.capabilities();
     let firmware = dev.read_firmware_version()?;
     let hw_vers = dev.read_hardware_version()?;
     let speeds = dev.read_speeds()?;
