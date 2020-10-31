@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/jaylink.svg)](https://crates.io/crates/jaylink)
 [![docs.rs](https://docs.rs/jaylink/badge.svg)](https://docs.rs/jaylink/)
-[![Build Status](https://travis-ci.org/jonas-schievink/jaylink.svg?branch=master)](https://travis-ci.org/jonas-schievink/jaylink)
+![CI](https://github.com/jonas-schievink/jaylink/workflows/CI/badge.svg)
 
 This crate allows talking to J-Link debug probes attached via USB. The probe's
 pins can be controlled and I/O operations using JTAG or SWD can be performed,
