@@ -101,6 +101,12 @@ impl fmt::Display for Interface {
     }
 }
 
+impl InterfaceFlags {
+    fn from_interface(interface: Interface) -> Self {
+        InterfaceFlags::from_bits(1 << interface as u32).unwrap()
+    }
+}
+
 /// A set of supported target interfaces.
 ///
 /// This implements `IntoIterator`, so you can call `.into_iter()` to iterate over the contained
@@ -124,10 +130,13 @@ impl Interfaces {
         Self(flags)
     }
 
+    pub(crate) fn single(interface: Interface) -> Self {
+        Self(InterfaceFlags::from_interface(interface))
+    }
+
     /// Returns whether `interface` is contained in `self`.
     pub fn contains(&self, interface: Interface) -> bool {
-        self.0
-            .contains(InterfaceFlags::from_bits(1 << interface as u32).unwrap())
+        self.0.contains(InterfaceFlags::from_interface(interface))
     }
 }
 

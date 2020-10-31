@@ -80,7 +80,7 @@ fn detailed_info(dev: &JayLink) -> Result<String> {
     let max_mem_block = dev.read_max_mem_block()?;
     let intf = dev.read_current_interface()?;
     let avail_intfs = dev
-        .read_available_interfaces()?
+        .available_interfaces()
         .into_iter()
         .map(|intf| intf.to_string())
         .collect::<Vec<_>>()
