@@ -94,6 +94,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use io::Cursor;
 use log::{debug, trace, warn};
 use std::cell::{Cell, RefCell, RefMut};
+use std::convert::TryFrom;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use std::{
@@ -955,29 +956,34 @@ impl JayLink {
         buf[0] = cmd as u8;
         // buf[1] is dummy data for alignment
         // buf[2..=3] is the bit count, which we'll fill in later
-        buf.extend(tms.collapse_bytes());
-        let tms_byte_count = buf.len() - 4;
-        buf.extend(tdi.collapse_bytes());
-        let tdi_byte_count = buf.len() - 4 - tms_byte_count;
+        let mut tms_bit_count = 0;
+        buf.extend(tms.inspect(|_| tms_bit_count += 1).collapse_bytes());
+        let mut tdi_bit_count = 0;
+        buf.extend(tdi.inspect(|_| tdi_bit_count += 1).collapse_bytes());
 
         assert_eq!(
-            tms_byte_count, tdi_byte_count,
+            tms_bit_count, tdi_bit_count,
             "TMS and TDI must have the same number of bits"
         );
-        assert!((tms_byte_count * 8) < 65535, "too much data to transfer");
+
+        let bit_count = u16::try_from(tms_bit_count).expect("too much data to transfer");
 
         // JTAG3 and JTAG2 use the same format for JTAG operations
-        let num_bits = (tms_byte_count * 8) as u16;
-        buf[2..=3].copy_from_slice(&num_bits.to_le_bytes());
-        let num_bytes = usize::from((num_bits + 7) >> 3);
+        buf[2..=3].copy_from_slice(&bit_count.to_le_bytes());
 
         self.write_cmd(&buf)?;
 
-        trace!("Reading {} antwort bytes", num_bytes);
+        // Round bit count up to multple of 8 to get the number of response bytes.
+        let num_resp_bytes = (tms_bit_count + 7) >> 3;
+        trace!(
+            "{} TMS/TDI bits sent; reading {} response bytes",
+            tms_bit_count,
+            num_resp_bytes
+        );
 
         // Response is `num_bytes` TDO data bytes and one status byte,
         // if the JTAG3 command is used.
-        let mut read_len = num_bytes;
+        let mut read_len = num_resp_bytes;
 
         if has_status_byte {
             read_len += 1;
@@ -987,14 +993,20 @@ impl JayLink {
 
         // Check the status if a JTAG3 command was used.
         if has_status_byte && buf[read_len - 1] != 0 {
-            return Err(Error::new(ErrorKind::Other, "Error reading JTAG data"));
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!(
+                    "probe I/O command returned error code {:#x}",
+                    buf[read_len - 1]
+                ),
+            ));
         }
 
         drop(buf);
 
         Ok(BitIter::new(
-            &self.cmd_buf.get_mut()[..num_bytes],
-            num_bits as usize,
+            &self.cmd_buf.get_mut()[..num_resp_bytes],
+            tms_bit_count,
         ))
     }
 
@@ -1062,7 +1074,11 @@ impl JayLink {
         self.read(&mut buf[..num_bytes + 1])?;
 
         if buf[num_bytes] != 0 {
-            return Err(format!("SWD op returned error code {:#x}", buf[num_bytes])).jaylink_err();
+            return Err(format!(
+                "probe I/O command returned error code {:#x}",
+                buf[num_bytes]
+            ))
+            .jaylink_err();
         }
 
         drop(buf);
