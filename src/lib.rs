@@ -428,13 +428,12 @@ impl JayLink {
             write_ep,
             cmd_buf: RefCell::new(Vec::new()),
             caps: Capabilities::from_raw_legacy(0), // dummy value
-            interface: Interface::Jtag,
+            interface: Interface::Spi,              // dummy value, must not be JTAG
             interfaces: Interfaces::from_bits_warn(0), // dummy value
             handle,
         };
         this.fill_capabilities()?;
         this.fill_interfaces()?;
-        this.fill_current_interface()?;
 
         // Probes remember the selected interface, so provide consistent defaults to avoid
         // unreliable apps.
@@ -492,26 +491,6 @@ impl JayLink {
 
         let intfs = Interfaces::from_bits_warn(u32::from_le_bytes(buf));
         self.interfaces = intfs;
-        Ok(())
-    }
-
-    fn fill_current_interface(&mut self) -> Result<()> {
-        if !self.capabilities().contains(Capabilities::SELECT_IF) {
-            // Pre-SELECT_IF probes only support JTAG.
-            return Ok(());
-        }
-
-        self.write_cmd(&[Command::SelectIf as u8, 0xFE])?;
-
-        let mut buf = [0; 4];
-        self.read(&mut buf)?;
-
-        let raw = u32::from_le_bytes(buf);
-        let intf = Interface::from_u32(raw)
-            .ok_or_else(|| format!("invalid interface value {}", raw))
-            .jaylink_err()?;
-        debug!("read active interface: {:?}", intf);
-        self.interface = intf;
         Ok(())
     }
 
