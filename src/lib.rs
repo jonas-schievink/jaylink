@@ -905,7 +905,8 @@ impl JayLink {
     ///
     /// The data received on `TDO` is returned to the caller as an iterator yielding `bool`s.
     ///
-    /// The probe will be put into JTAG interface mode, if JTAG isn't selected already.
+    /// The caller must ensure that the probe is in JTAG mode by calling
+    /// [`select_interface`]`(`[`Interface::Jtag`]`)`.
     ///
     /// # Parameters
     ///
@@ -917,6 +918,9 @@ impl JayLink {
     /// This method will panic if `tms` and `tdi` have different lengths. It will also panic if any
     /// of them contains more then 65535 bits of data, which is the maximum amount that can be
     /// transferred in one operation.
+    ///
+    /// [`select_interface`]: #method.select_interface
+    /// [`Interface::Jtag`]: enum.Interface.html#variant.Jtag
     // NB: Explicit `'a` lifetime used to improve rustdoc output
     pub fn jtag_io<'a, M, D>(&'a mut self, tms: M, tdi: D) -> Result<BitIter<'a>>
     where
@@ -1044,7 +1048,7 @@ impl JayLink {
 
         assert_eq!(
             dir_bit_count, swdio_bit_count,
-            "DIR and SWDIO must have the same number of bits"
+            "`dir` and `swdio` must have the same number of bits"
         );
         assert!(dir_bit_count < 65535, "too much data to transfer");
 
