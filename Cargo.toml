@@ -51,6 +51,7 @@ version-sync = "0.9"
 env_logger = "0.8.1"
 structopt = "0.3.4"
 itm = "0.3.1"
+jep106 = "0.2.4"
 
 [dependencies]
 # Public
