@@ -591,7 +591,7 @@ impl JayLink {
         } else {
             Err(Error::new(
                 ErrorKind::Other,
-                format!("interface {:?} must be selected for this operation (currently using interface {:?})", intf, self.interface),
+                format!("interface {} must be selected for this operation (currently using interface {})", intf, self.interface),
             ))
         }
     }
@@ -990,7 +990,7 @@ impl JayLink {
             num_resp_bytes
         );
 
-        // Response is `num_bytes` TDO data bytes and one status byte,
+        // Response is `num_resp_bytes` TDO data bytes and one status byte,
         // if the JTAG3 command is used.
         let mut read_len = num_resp_bytes;
 
