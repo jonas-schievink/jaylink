@@ -743,13 +743,10 @@ impl JayLink {
 
     /// Selects the interface to use for talking to the target MCU.
     ///
-    /// This requires the [`SELECT_IF`] capability.
-    ///
     /// Switching interfaces will reset the configured transfer speed, so [`set_speed`] needs to be
     /// called *after* `select_interface`.
     ///
-    /// Note that the interface is automatically selected by the I/O methods, so this function
-    /// usually does not need to be called.
+    /// **Note**: Selecting a different interface may cause the J-Link to perform target I/O!
     ///
     /// [`set_speed`]: #method.set_speed
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
