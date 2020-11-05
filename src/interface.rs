@@ -74,6 +74,23 @@ impl Interface {
     pub(crate) fn as_u8(self) -> u8 {
         self as u8
     }
+
+    /// Returns whether this interface is an alternative encoding of the JTAG signals.
+    ///
+    /// Interfaces for which this is the case can be used with the normal JTAG APIs.
+    pub fn is_jtag_equivalent(self) -> bool {
+        match self {
+            Interface::Jtag |
+            Interface::C2 |
+            Interface::CJtag |
+            Interface::Mc2WireJtag |
+            Interface::Pic32Icsp => true,
+            Interface::Fine |  // (not sure)
+            Interface::Spi |
+            Interface::Bdm3 |
+            Interface::Swd => false,
+        }
+    }
 }
 
 impl fmt::Display for Interface {

@@ -925,7 +925,14 @@ impl JayLink {
         M: IntoIterator<Item = bool>,
         D: IntoIterator<Item = bool>,
     {
-        self.require_interface_selected(Interface::Jtag)?;
+        if !self.interface.is_jtag_equivalent() {
+            return Err(format!(
+                "JTAG-like interface must be selected for this operation (currently using \
+                 interface {})",
+                self.interface
+            ))
+            .jaylink_err();
+        }
 
         let mut has_status_byte = false;
         // There's 3 commands for doing a JTAG transfer. The older 2 are obsolete with hardware
