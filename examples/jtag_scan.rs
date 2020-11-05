@@ -231,6 +231,7 @@ impl JtagProbe {
             // `max_length` bits), we should see a continuous stream of 0s in TDO.
             self.shift_tdio(&vec![false; max_length], false)?;
             let mut zeroes = self.shift_tdio(&vec![false; max_length], false)?;
+            log::trace!("check_connection: zeroes = {:?}", zeroes);
             if zeroes.any(|bit| bit) {
                 broken = true;
             }
@@ -238,6 +239,7 @@ impl JtagProbe {
             // Now do the same with 1s, in case TDO is just floating low (or has a pull-down).
             self.shift_tdio(&vec![true; max_length], false)?;
             let mut ones = self.shift_tdio(&vec![true; max_length], true)?;
+            log::trace!("check_connection: ones = {:?}", ones);
             if ones.any(|bit| !bit) {
                 broken = true;
             }
