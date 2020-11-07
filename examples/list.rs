@@ -48,9 +48,9 @@ fn run() -> Result<()> {
 
         println!("{}", dev_data);
 
-        if let Some(dev) = dev {
+        if let Some(mut dev) = dev {
             // Print detailed information read from the device
-            let info = match detailed_info(&dev) {
+            let info = match detailed_info(&mut dev) {
                 Ok(info) => info,
                 Err(e) => format!("<{}>", e),
             };
@@ -71,32 +71,33 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn detailed_info(dev: &JayLink) -> Result<String> {
+fn detailed_info(dev: &mut JayLink) -> Result<String> {
     let caps = dev.capabilities();
     let firmware = dev.read_firmware_version()?;
     let hw_vers = dev.read_hardware_version()?;
-    let speeds = dev.read_speeds()?;
     let swo_speeds = dev.read_swo_speeds(SwoMode::Uart)?;
     let max_mem_block = dev.read_max_mem_block()?;
-    let intf = dev.current_interface();
-    let avail_intfs = dev
-        .available_interfaces()
-        .into_iter()
-        .map(|intf| intf.to_string())
-        .collect::<Vec<_>>()
-        .join(", ");
+    let avail_intfs = dev.available_interfaces();
     let tgt_voltage = dev.read_target_voltage()?;
 
     let mut info = String::new();
-    writeln!(info, "  Capabilities: {:?}", caps).unwrap();
-    writeln!(info, "      Firmware: {}", firmware).unwrap();
-    writeln!(info, "    HW Version: {}", hw_vers).unwrap();
-    writeln!(info, "    Max. Speed: {:?}", speeds.max_speed()).unwrap();
+    writeln!(info, "Capabilities: {:?}", caps).unwrap();
+    writeln!(info, "Firmware: {}", firmware).unwrap();
+    writeln!(info, "HW Version: {}", hw_vers).unwrap();
     writeln!(info, "Max. SWO Speed: {:?}", swo_speeds.max_speed()).unwrap();
-    writeln!(info, " Max. Memblock: {} bytes", max_mem_block).unwrap();
-    writeln!(info, "     Interface: {}", intf).unwrap();
-    writeln!(info, " Avail. Interf: {}", avail_intfs).unwrap();
-    writeln!(info, "         VTref: {} V", tgt_voltage as f32 / 1000.0).unwrap();
+    writeln!(info, "Max. Memblock: {} bytes", max_mem_block).unwrap();
+    writeln!(info, "VTref: {} V", tgt_voltage as f32 / 1000.0).unwrap();
+    writeln!(info, "Interfaces:").unwrap();
+    for interface in avail_intfs {
+        if interface == Interface::Fine {
+            // FIXME: Selecting FINE hangs the probe.
+            continue;
+        }
+
+        dev.select_interface(interface)?;
+        let mhz = dev.read_speeds()?.max_speed() / 1_000_000;
+        writeln!(info, "    - {} (up to {} MHz)", interface, mhz).unwrap();
+    }
 
     Ok(info)
 }
