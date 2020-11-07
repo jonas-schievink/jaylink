@@ -875,6 +875,9 @@ impl JayLink {
     }
 
     /// Reads the target voltage measured on the `VTref` pin, in millivolts.
+    ///
+    /// In order to use the J-Link, this voltage must be present, since it will be used as the level
+    /// of the I/O signals to the target.
     pub fn read_target_voltage(&self) -> Result<u16> {
         self.write_cmd(&[Command::GetState as u8])?;
 
