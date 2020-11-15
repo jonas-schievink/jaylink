@@ -324,11 +324,11 @@ impl IdCode {
 
     /// Returns the JEDEC Continuation Code page, modulo 16.
     fn manufacturer_jedec_cc(&self) -> u8 {
-        ((self.manufacturer() >> 8) & 0b1111) as u8
+        ((self.manufacturer() >> 7) & 0b1111) as u8
     }
 
     fn manufacturer_jedec_id(&self) -> u8 {
-        self.manufacturer() as u8
+        self.manufacturer() as u8 & 0x7F
     }
 
     fn manufacturer_name(&self) -> Option<&'static str> {
