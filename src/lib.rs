@@ -761,6 +761,23 @@ impl JayLink {
         Ok(())
     }
 
+    pub fn read_interface(&mut self) -> Result<Interface> {
+        self.require_capabilities(Capabilities::SELECT_IF)?;
+
+        self.write_cmd(&[Command::SelectIf as u8, 0xFE])?;
+
+        let mut buf = [0; 4];
+        self.read(&mut buf)?;
+
+        let raw = u32::from_le_bytes(buf);
+        let intf = Interface::from_u32(raw)
+            .ok_or_else(|| format!("invalid interface value {}", raw))
+            .jaylink_err()?;
+        debug!("read active interface: {:?}", intf);
+
+        Ok(intf)
+    }
+
     /// Changes the state of the TMS / SWDIO pin (pin 7).
     ///
     /// The pin will be set to the level of `VTref` if `tms` is `true`, and to GND if it is `false`.

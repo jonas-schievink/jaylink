@@ -26,6 +26,16 @@ macro_rules! define_interfaces {
             const ALL: &'static [Self] = &[
                 $( Self::$name ),+
             ];
+
+            pub(crate) fn from_u32(raw: u32) -> Option<Self> {
+                // Indices must match bit positions in `Interfaces`.
+                match raw {
+                    $(
+                        $id => Some(Interface::$name),
+                    )+
+                    _ => None,
+                }
+            }
         }
 
         bitflags! {
