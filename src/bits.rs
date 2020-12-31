@@ -40,16 +40,10 @@ impl<'a> BitIter<'a> {
             bits_left: count,
         };
 
-        let bytes = count / 8;
-        let frac_bits = (count % 8) as u8;
-        self.buf = &self.buf[bytes..];
-        let bits_left = 7 - self.next_bit;
-        if bits_left >= frac_bits {
-            self.next_bit += frac_bits;
-        } else {
-            self.buf = &self.buf[1..];
-            self.next_bit = frac_bits - bits_left;
-        }
+        // Update self
+        let next_byte = (count + self.next_bit as usize) / 8;
+        self.next_bit = (count as u8 + self.next_bit) % 8;
+        self.buf = &self.buf[next_byte..];
         self.bits_left -= count;
         other
     }
@@ -209,6 +203,100 @@ mod tests {
         assert_eq!(
             split(vec![0xFF, 0x01], 9, 16),
             (vec![true; 9], vec![false; 7])
+        );
+
+        assert_eq!(
+            split(vec![0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55], 35, 64),
+            (
+                vec![
+                    false, true, false, true, false, true, false, true, true, false, true, false,
+                    true, false, true, false, false, true, false, true, false, true, false, true,
+                    true, false, true, false, true, false, true, false, false, true, false
+                ],
+                vec![
+                    true, false, true, false, true, true, false, true, false, true, false, true,
+                    false, false, true, false, true, false, true, false, true, true, false, true,
+                    false, true, false, true, false
+                ]
+            )
+        );
+
+        assert_eq!(
+            split(vec![0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55], 40, 64),
+            (
+                vec![
+                    false, true, false, true, false, true, false, true, true, false, true, false,
+                    true, false, true, false, false, true, false, true, false, true, false, true,
+                    true, false, true, false, true, false, true, false, false, true, false, true,
+                    false, true, false, true,
+                ],
+                vec![
+                    true, false, true, false, true, false, true, false, false, true, false, true,
+                    false, true, false, true, true, false, true, false, true, false, true, false
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn bit_iter_split_off_large_test() {
+        let mut iterator = BitIter::new(
+            &[
+                0xFF, 0x10, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x40, 0x04, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0x11, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x24, 0x08, 0x00, 0x00, 0x9E, 0xFF,
+            ],
+            208,
+        );
+
+        assert_eq!(
+            iterator.split_off(4).collect::<Vec<bool>>(),
+            vec![true, true, true, true]
+        );
+        assert_eq!(
+            iterator.split_off(8).collect::<Vec<bool>>(),
+            vec![true, true, true, true, false, false, false, false]
+        );
+        assert_eq!(
+            iterator.split_off(3).collect::<Vec<bool>>(),
+            vec![true, false, false]
+        );
+        assert_eq!(
+            iterator.split_off(35).collect::<Vec<bool>>(),
+            vec![
+                false, true, false, false, false, false, false, false, false, true, true, true,
+                true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true, true,
+            ]
+        );
+
+        assert_eq!(
+            iterator.split_off(4).collect::<Vec<bool>>(),
+            vec![true, true, true, true]
+        );
+        assert_eq!(
+            iterator.split_off(8).collect::<Vec<bool>>(),
+            vec![true, true, false, false, false, false, false, false]
+        );
+        assert_eq!(
+            iterator.split_off(3).collect::<Vec<bool>>(),
+            vec![true, false, false]
+        );
+
+        for _ in 0..35 {
+            iterator.next();
+        }
+
+        assert_eq!(
+            iterator.split_off(4).collect::<Vec<bool>>(),
+            vec![true, true, true, true]
+        );
+        assert_eq!(
+            iterator.split_off(8).collect::<Vec<bool>>(),
+            vec![true, true, true, true, true, true, true, true]
+        );
+        assert_eq!(
+            iterator.split_off(3).collect::<Vec<bool>>(),
+            vec![true, false, false]
         );
     }
 }
