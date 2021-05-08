@@ -485,6 +485,8 @@ impl JayLink {
         if !self.capabilities().contains(Capabilities::SELECT_IF) {
             // Pre-SELECT_IF probes only support JTAG.
             self.interfaces = Interfaces::single(Interface::Jtag);
+            self.interface = Interface::Jtag;
+
             return Ok(());
         }
 
