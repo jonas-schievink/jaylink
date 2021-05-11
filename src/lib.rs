@@ -436,9 +436,12 @@ impl JayLink {
         this.fill_interfaces()?;
 
         // Probes remember the selected interface, so provide consistent defaults to avoid
-        // unreliable apps. For probes which cannot select interfaces, the JTAG interface
-        // is already selected.
-        if this.capabilities().contains(Capabilities::SELECT_IF) {
+        // unreliable apps.
+        // - For probes which cannot select interfaces, the JTAG interface is already selected.
+        // - For probes which can, but don't support JTAG, we don't select any interface, leaving the default.
+        if this.capabilities().contains(Capabilities::SELECT_IF)
+            && this.interfaces.contains(Interface::Jtag)
+        {
             this.select_interface(Interface::Jtag)?;
         }
 
