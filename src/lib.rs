@@ -80,7 +80,6 @@ mod bits;
 mod capabilities;
 mod error;
 mod interface;
-mod readme;
 
 pub use self::bits::BitIter;
 pub use self::capabilities::Capabilities;
