@@ -89,7 +89,7 @@ pub use self::interface::{Interface, InterfaceIter, Interfaces};
 use self::bits::IteratorExt as _;
 use self::error::ResultExt as _;
 use bitflags::bitflags;
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use io::Cursor;
 use log::{debug, trace, warn};
 use std::cell::{Cell, RefCell, RefMut};
@@ -160,6 +160,15 @@ enum Command {
 
     ReadConfig = 0xF2,
     WriteConfig = 0xF3,
+
+    Register = 0x09,
+}
+
+#[repr(u8)]
+#[allow(dead_code)]
+enum RegisterCommand {
+    Register = 0x64,
+    Unregister = 0x65,
 }
 
 #[repr(u8)]
@@ -204,6 +213,15 @@ impl SwoStatus {
         }
         flags
     }
+}
+
+#[derive(Default, Debug)]
+pub struct Connection {
+    handle: u16,
+    pid: u32,
+    hid: Option<std::net::Ipv4Addr>,
+    iid: u8,
+    cid: u8,
 }
 
 /// A handle to a J-Link USB device.
@@ -434,6 +452,10 @@ impl JayLink {
         };
         this.fill_capabilities()?;
         this.fill_interfaces()?;
+
+        if this.capabilities().contains(Capabilities::REGISTER) {
+            this.register(Connection::default())?;
+        }
 
         // Probes remember the selected interface, so provide consistent defaults to avoid
         // unreliable apps.
@@ -905,6 +927,30 @@ impl JayLink {
     pub fn set_kickstart_power(&mut self, enable: bool) -> Result<()> {
         self.require_capabilities(Capabilities::SET_KS_POWER)?;
         self.write_cmd(&[Command::SetKsPower as u8, enable as u8])?;
+        Ok(())
+    }
+
+    /// Registers a connection on the device.
+    ///
+    /// This requires the [`REGISTER`] capability.
+    ///
+    /// **Note**: This may be **required** on some devices for SWD to work at all.
+    ///
+    /// [`REGISTER`]: struct.Capabilities.html#associatedconstant.REGISTER
+    pub fn register(&self, conn: Connection) -> Result<()> {
+        self.require_capabilities(Capabilities::REGISTER)?;
+        let mut buf = Vec::with_capacity(14);
+        buf.push(Command::Register as u8);
+        buf.push(RegisterCommand::Register as u8);
+        buf.write_u32::<LittleEndian>(conn.pid).unwrap();
+        buf.write_u32::<BigEndian>(conn.hid.unwrap_or(std::net::Ipv4Addr::LOCALHOST).into())
+            .unwrap();
+        buf.push(conn.iid);
+        buf.push(conn.cid);
+        buf.write_u16::<LittleEndian>(conn.handle).unwrap();
+        self.write_cmd(&buf)?;
+        let mut buf = [0; 76];
+        self.read(&mut buf)?;
         Ok(())
     }
 
