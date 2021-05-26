@@ -91,6 +91,7 @@ fn detailed_info(dev: &mut JayLink) -> Result<String> {
     for interface in avail_intfs {
         if interface == Interface::Fine {
             // FIXME: Selecting FINE hangs the probe.
+            writeln!(info, "    - {} (skipped)", interface).unwrap();
             continue;
         }
 
