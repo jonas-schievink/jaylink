@@ -1113,6 +1113,13 @@ impl JayLink {
     ///   can call [`read_max_mem_block`] to get an approximation of the available memory on the
     ///   probe.
     ///
+    /// # Return Value
+    ///
+    /// This returns a [`SwoStream`] object, which can be used to directly read the captured SWO
+    /// data via [`std::io::Read`]. If blocking reads are undesired (or the [`JayLink`] instance
+    /// needs to be used for something else while SWO capture is in progress), the [`SwoStream`]
+    /// can be ignored and [`JayLink::swo_read`] be used instead.
+    ///
     /// [`SWO`]: struct.Capabilities.html#associatedconstant.SWO
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
     /// [`read_max_mem_block`]: #method.read_max_mem_block
@@ -1175,10 +1182,11 @@ impl JayLink {
     /// Reads captured SWO data from the probe and writes it to `data`.
     ///
     /// This needs to be called regularly after SWO capturing has been started. If it is not called
-    /// often enough, the buffer on the probe will fill up and device data will be dropped.
+    /// often enough, the buffer on the probe will fill up and device data will be dropped. You can
+    /// call [`SwoData::did_overrun`] to check for this condition.
     ///
-    /// Note that the probe firmware seems to dislike many short SWO reads (as in, the probe will
-    /// fall off the bus and reset), so it is recommended to use a buffer that is the same size as
+    /// **Note**: the probe firmware seems to dislike many short SWO reads (as in, the probe will
+    /// *fall off the bus and reset*), so it is recommended to use a buffer that is the same size as
     /// the on-probe data buffer.
     pub fn swo_read<'a>(&self, data: &'a mut [u8]) -> Result<SwoData<'a>> {
         let mut cmd = [0; 9];
