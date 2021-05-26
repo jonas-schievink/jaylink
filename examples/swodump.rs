@@ -1,3 +1,12 @@
+//! Simple SWO capture demo that prints decoded ITM packets to stdout.
+//!
+//! Note that this does not reconfigure the target MCU to enable the ITM ports, set the speed, or do
+//! anything else that might be required before the MCU starts outputting SWO data. It is expected
+//! that the firmware will perform these steps.
+//!
+//! More advanced tooling would do this automatically, but the mechanism involved is
+//! vendor-specific, so `jaylink` does not know how to do this.
+
 use jaylink::Interface;
 use jaylink::{JayLink, SwoMode};
 use std::error::Error;
@@ -12,7 +21,7 @@ struct Opts {
 
     /// Frequency/Baudrate to sample SWO at.
     #[structopt(long = "freq", short = "f")]
-    frequency: u32,
+    frequency: Option<u32>,
 
     /// Size of on-probe buffer to allocate.
     #[structopt(long = "probe-buf", default_value = "1024")]
@@ -34,17 +43,19 @@ fn run(opts: Opts) -> Result<(), Box<dyn Error>> {
 
     let speeds = probe.read_swo_speeds(SwoMode::Uart)?;
     eprintln!("Max. SWO Speed: {} Hz", speeds.max_speed_hz());
+
+    let frequency = opts.frequency.unwrap_or(speeds.max_speed_hz());
     eprintln!(
         "Configuring at {} Hz ({} Bytes/sec) with a {} Byte buffer",
-        opts.frequency,
-        opts.frequency / 8,
+        frequency,
+        frequency / 8,
         opts.probe_buf,
     );
     eprintln!("-----------------------------------------");
 
     probe.select_interface(Interface::Swd)?;
     probe.swo_stop()?;
-    let stream = probe.swo_start(SwoMode::Uart, opts.frequency, opts.probe_buf)?;
+    let stream = probe.swo_start(SwoMode::Uart, frequency, opts.probe_buf)?;
     let mut stream = itm::Decoder::new(stream, false);
     let out = std::io::stdout();
     let mut out = out.lock();
