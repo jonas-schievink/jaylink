@@ -1432,7 +1432,7 @@ impl fmt::Display for HardwareType {
     }
 }
 
-/// J-Link CPU frequency info.
+/// J-Link communication speed info.
 #[derive(Debug)]
 pub struct Speeds {
     base_freq: u32,
@@ -1440,14 +1440,6 @@ pub struct Speeds {
 }
 
 impl Speeds {
-    pub fn base_freq(&self) -> u32 {
-        self.base_freq
-    }
-
-    pub fn min_div(&self) -> u16 {
-        self.min_div
-    }
-
     /// Returns the maximum supported speed for target communication (in Hz).
     pub fn max_speed(&self) -> u32 {
         self.base_freq / u32::from(self.min_div)
