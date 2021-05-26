@@ -42,7 +42,7 @@ fn run(opts: Opts) -> Result<(), Box<dyn Error>> {
     eprintln!("-----------------------------------------");
 
     probe.swo_stop()?;
-    let stream = probe.swo_start_uart(opts.frequency, opts.probe_buf)?;
+    let stream = probe.swo_start(SwoMode::Uart, opts.frequency, opts.probe_buf)?;
     let mut stream = itm::Decoder::new(stream, false);
     let out = std::io::stdout();
     let mut out = out.lock();

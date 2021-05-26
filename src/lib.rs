@@ -1080,7 +1080,7 @@ impl JayLink {
         ))
     }
 
-    /// Starts capturing SWO data in UART (NRZ) mode.
+    /// Starts capturing SWO data.
     ///
     /// This will switch the probe to SWD interface mode if necessary (required for SWO capture).
     ///
@@ -1088,7 +1088,9 @@ impl JayLink {
     ///
     /// # Parameters
     ///
-    /// - `baudrate`: The UART baud rate to capture data at.
+    /// - `mode`: The SWO data encoding mode to use.
+    /// - `speed`: The data rate to capture at (when using [`SwoMode::Uart`], this is the UART baud
+    ///   rate).
     /// - `buf_size`: The size (in Bytes) of the on-device buffer to allocate for the SWO data. You
     ///   can call [`read_max_mem_block`] to get an approximation of the available memory on the
     ///   probe.
@@ -1103,7 +1105,12 @@ impl JayLink {
     /// [`SWO`]: struct.Capabilities.html#associatedconstant.SWO
     /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
     /// [`read_max_mem_block`]: #method.read_max_mem_block
-    pub fn swo_start_uart<'a>(&'a mut self, baudrate: u32, buf_size: u32) -> Result<SwoStream<'a>> {
+    pub fn swo_start<'a>(
+        &'a mut self,
+        mode: SwoMode,
+        speed: u32,
+        buf_size: u32,
+    ) -> Result<SwoStream<'a>> {
         self.require_capabilities(Capabilities::SWO)?;
 
         // The probe must be in SWD mode for SWO capture to work.
@@ -1114,10 +1121,10 @@ impl JayLink {
         buf[1] = SwoCommand::Start as u8;
         buf[2] = 0x04;
         buf[3] = SwoParam::Mode as u8;
-        buf[4..8].copy_from_slice(&(SwoMode::Uart as u32).to_le_bytes());
+        buf[4..8].copy_from_slice(&(mode as u32).to_le_bytes());
         buf[8] = 0x04;
         buf[9] = SwoParam::Baudrate as u8;
-        buf[10..14].copy_from_slice(&baudrate.to_le_bytes());
+        buf[10..14].copy_from_slice(&speed.to_le_bytes());
         buf[14] = 0x04;
         buf[15] = SwoParam::BufferSize as u8;
         buf[16..20].copy_from_slice(&buf_size.to_le_bytes());
@@ -1131,7 +1138,7 @@ impl JayLink {
 
         Ok(SwoStream {
             jaylink: self,
-            baudrate,
+            speed,
             buf_size,
             buf: Cursor::new(Vec::new()),
             next_poll: Instant::now(),
@@ -1225,7 +1232,7 @@ impl fmt::Debug for JayLink {
 #[derive(Debug)]
 pub struct SwoStream<'a> {
     jaylink: &'a JayLink,
-    baudrate: u32,
+    speed: u32,
     buf_size: u32,
     next_poll: Instant,
     /// Internal buffer the size of the on-probe buffer. This is filled in one go to avoid
@@ -1249,7 +1256,7 @@ impl SwoStream<'_> {
     fn poll_interval(&self) -> Duration {
         const MULTIPLIER: u32 = 2;
 
-        let bytes_per_sec = self.baudrate / 8;
+        let bytes_per_sec = self.speed / 8;
         let buffers_per_sec =
             cmp::max(1, bytes_per_sec / self.buf.get_ref().len() as u32) * MULTIPLIER;
         Duration::from_micros(1_000_000 / u64::from(buffers_per_sec))
