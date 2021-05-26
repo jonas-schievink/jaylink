@@ -284,6 +284,9 @@ impl JayLink {
     }
 
     /// Opens a specific J-Link USB device.
+    ///
+    /// **Note**: Probes remember their selected interfaces between reconnections, so it is
+    /// recommended to always call [`JayLink::select_interface`] after opening a probe.
     pub fn open_usb(usb_device: UsbDeviceInfo) -> Result<Self> {
         // NB: We take `UsbDeviceInfo` by value since it isn't cloneable (yet), so taking it by-ref
         // would lock us into a less flexible API. It should be easy to make it cloneable with a few
@@ -427,16 +430,6 @@ impl JayLink {
         };
         this.fill_capabilities()?;
         this.fill_interfaces()?;
-
-        // Probes remember the selected interface, so provide consistent defaults to avoid
-        // unreliable apps.
-        // - For probes which cannot select interfaces, the JTAG interface is already selected.
-        // - For probes which can, but don't support JTAG, we don't select any interface, leaving the default.
-        if this.capabilities().contains(Capabilities::SELECT_IF)
-            && this.interfaces.contains(Interface::Jtag)
-        {
-            this.select_interface(Interface::Jtag)?;
-        }
 
         Ok(this)
     }
