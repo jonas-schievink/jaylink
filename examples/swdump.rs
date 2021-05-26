@@ -20,7 +20,7 @@
 //!
 //! This example assumes that the above "bug" (or misspecification?) is present.
 
-use jaylink::{CommunicationSpeed, Interface, JayLink};
+use jaylink::{Interface, JayLink, SpeedConfig};
 use log::trace;
 use std::{cmp, fmt};
 use structopt::StructOpt;
@@ -294,7 +294,7 @@ fn run(opts: Opts) -> Result<(), SwdError> {
 
     // Limit speed so invalid 0xffff doesn't appear
     let khz = cmp::min(opts.speed.unwrap_or(200), 0xfffe);
-    probe.set_speed(CommunicationSpeed::khz(khz).unwrap())?;
+    probe.set_speed(SpeedConfig::khz(khz).unwrap())?;
 
     probe.swj_seq()?;
 

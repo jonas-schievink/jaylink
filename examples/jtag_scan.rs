@@ -9,7 +9,7 @@
 
 use std::{cmp, iter};
 
-use jaylink::{BitIter, CommunicationSpeed, Interface, JayLink};
+use jaylink::{BitIter, Interface, JayLink, SpeedConfig};
 use structopt::StructOpt;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -46,7 +46,7 @@ fn run(opts: Opts) -> Result<()> {
 
     // Limit speed so invalid 0xffff doesn't appear
     let khz = cmp::min(opts.speed, 0xfffe);
-    probe.set_speed(CommunicationSpeed::khz(khz).unwrap())?;
+    probe.set_speed(SpeedConfig::khz(khz).unwrap())?;
 
     // Reset TAPs
     probe.reset_trst()?;

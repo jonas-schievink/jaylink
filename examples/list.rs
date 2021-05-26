@@ -84,7 +84,7 @@ fn detailed_info(dev: &mut JayLink) -> Result<String> {
     writeln!(info, "Capabilities: {:?}", caps).unwrap();
     writeln!(info, "Firmware: {}", firmware).unwrap();
     writeln!(info, "HW Version: {}", hw_vers).unwrap();
-    writeln!(info, "Max. SWO Speed: {:?}", swo_speeds.max_speed()).unwrap();
+    writeln!(info, "Max. SWO Speed: {:?} Hz", swo_speeds.max_speed_hz()).unwrap();
     writeln!(info, "Max. Memblock: {} bytes", max_mem_block).unwrap();
     writeln!(info, "VTref: {} V", tgt_voltage as f32 / 1000.0).unwrap();
     writeln!(info, "Interfaces:").unwrap();
@@ -96,7 +96,7 @@ fn detailed_info(dev: &mut JayLink) -> Result<String> {
         }
 
         dev.select_interface(interface)?;
-        let mhz = dev.read_speeds()?.max_speed() / 1_000_000;
+        let mhz = dev.read_speeds()?.max_speed_hz() / 1_000_000;
         writeln!(info, "    - {} (up to {} MHz)", interface, mhz).unwrap();
     }
 

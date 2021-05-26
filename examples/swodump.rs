@@ -33,7 +33,7 @@ fn run(opts: Opts) -> Result<(), Box<dyn Error>> {
     let mut probe = JayLink::open_by_serial(opts.serial.as_deref())?;
 
     let speeds = probe.read_swo_speeds(SwoMode::Uart)?;
-    eprintln!("Max. SWO Speed: {}", speeds.max_speed());
+    eprintln!("Max. SWO Speed: {} Hz", speeds.max_speed_hz());
     eprintln!(
         "Configuring at {} Hz ({} Bytes/sec) with a {} Byte buffer",
         opts.frequency,

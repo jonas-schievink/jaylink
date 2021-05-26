@@ -629,7 +629,7 @@ impl JayLink {
     /// This requires the [`SPEED_INFO`] capability.
     ///
     /// [`SPEED_INFO`]: Capabilities::SPEED_INFO
-    pub fn read_speeds(&self) -> Result<Speeds> {
+    pub fn read_speeds(&self) -> Result<SpeedInfo> {
         self.require_capabilities(Capabilities::SPEED_INFO)?;
 
         self.write_cmd(&[Command::GetSpeeds as u8])?;
@@ -638,7 +638,7 @@ impl JayLink {
         self.read(&mut buf)?;
         let mut buf = &buf[..];
 
-        Ok(Speeds {
+        Ok(SpeedInfo {
             base_freq: buf.read_u32::<LittleEndian>().unwrap(),
             min_div: buf.read_u16::<LittleEndian>().unwrap(),
         })
@@ -649,7 +649,7 @@ impl JayLink {
     /// This requires the [`SWO`] capability.
     ///
     /// [`SWO`]: Capabilities::SWO
-    pub fn read_swo_speeds(&self, mode: SwoMode) -> Result<SwoSpeeds> {
+    pub fn read_swo_speeds(&self, mode: SwoMode) -> Result<SwoSpeedInfo> {
         self.require_capabilities(Capabilities::SWO)?;
 
         let mut buf = [0; 9];
@@ -679,7 +679,7 @@ impl JayLink {
         // FIXME: What's the word after the length for?
         let mut buf = &buf[8..];
 
-        Ok(SwoSpeeds {
+        Ok(SwoSpeedInfo {
             base_freq: buf.read_u32::<LittleEndian>().unwrap(),
             min_div: buf.read_u32::<LittleEndian>().unwrap(),
             max_div: buf.read_u32::<LittleEndian>().unwrap(),
@@ -835,17 +835,16 @@ impl JayLink {
 
     /// Sets the target communication speed.
     ///
-    /// If `speed` is set to [`CommunicationSpeed::ADAPTIVE`], then the [`ADAPTIVE_CLOCKING`]
-    /// capability is required. Note that adaptive clocking may not work for all target interfaces
-    /// (eg. SWD).
+    /// If `speed` is set to [`SpeedConfig::ADAPTIVE`], then the [`ADAPTIVE_CLOCKING`] capability is
+    /// required. Note that adaptive clocking may not work for all target interfaces (eg. SWD).
     ///
     /// When the selected target interface is switched (by calling [`JayLink::select_interface`], or
     /// any API method that automatically selects an interface), the communication speed is reset to
     /// some unspecified default value.
     ///
     /// [`ADAPTIVE_CLOCKING`]: Capabilities::ADAPTIVE_CLOCKING
-    pub fn set_speed(&mut self, speed: CommunicationSpeed) -> Result<()> {
-        if speed.raw == CommunicationSpeed::ADAPTIVE.raw {
+    pub fn set_speed(&mut self, speed: SpeedConfig) -> Result<()> {
+        if speed.raw == SpeedConfig::ADAPTIVE.raw {
             self.require_capabilities(Capabilities::ADAPTIVE_CLOCKING)?;
         }
 
@@ -1331,36 +1330,6 @@ impl<'a> Deref for SwoData<'a> {
     }
 }
 
-/// Target communication speed setting.
-///
-/// This determines the clock frequency of the target communication. Supported speeds for the
-/// currently selected target interface can be fetched via [`JayLink::read_speeds`].
-#[derive(Debug, Copy, Clone)]
-pub struct CommunicationSpeed {
-    raw: u16,
-}
-
-impl CommunicationSpeed {
-    /// Let the J-Link probe decide the speed.
-    ///
-    /// Requires the [`ADAPTIVE_CLOCKING`] capability.
-    ///
-    /// [`ADAPTIVE_CLOCKING`]: Capabilities::ADAPTIVE_CLOCKING
-    pub const ADAPTIVE: Self = Self { raw: 0xFFFF };
-
-    /// Manually specify speed in kHz.
-    ///
-    /// Returns `None` if the value is the invalid value `0xFFFF`. Note that this doesn't mean that
-    /// every other value will be accepted by the device.
-    pub fn khz(khz: u16) -> Option<Self> {
-        if khz == 0xFFFF {
-            None
-        } else {
-            Some(Self { raw: khz })
-        }
-    }
-}
-
 /// A hardware version returned by [`JayLink::read_hardware_version`].
 ///
 /// Note that the reported hardware version does not allow reliable feature detection, since
@@ -1434,21 +1403,21 @@ impl fmt::Display for HardwareType {
 
 /// J-Link communication speed info.
 #[derive(Debug)]
-pub struct Speeds {
+pub struct SpeedInfo {
     base_freq: u32,
     min_div: u16,
 }
 
-impl Speeds {
+impl SpeedInfo {
     /// Returns the maximum supported speed for target communication (in Hz).
-    pub fn max_speed(&self) -> u32 {
+    pub fn max_speed_hz(&self) -> u32 {
         self.base_freq / u32::from(self.min_div)
     }
 }
 
 /// Supported SWO capture speed info.
 #[derive(Debug)]
-pub struct SwoSpeeds {
+pub struct SwoSpeedInfo {
     base_freq: u32,
     min_div: u32,
     max_div: u32,
@@ -1458,10 +1427,40 @@ pub struct SwoSpeeds {
     max_presc: u32,
 }
 
-impl SwoSpeeds {
+impl SwoSpeedInfo {
     /// Returns the maximum supported speed for SWO capture (in Hz).
-    pub fn max_speed(&self) -> u32 {
+    pub fn max_speed_hz(&self) -> u32 {
         self.base_freq / self.min_div / cmp::max(1, self.min_presc)
+    }
+}
+
+/// Target communication speed setting.
+///
+/// This determines the clock frequency of the target communication. Supported speeds for the
+/// currently selected target interface can be fetched via [`JayLink::read_speeds`].
+#[derive(Debug, Copy, Clone)]
+pub struct SpeedConfig {
+    raw: u16,
+}
+
+impl SpeedConfig {
+    /// Let the J-Link probe decide the speed.
+    ///
+    /// Requires the [`ADAPTIVE_CLOCKING`] capability.
+    ///
+    /// [`ADAPTIVE_CLOCKING`]: Capabilities::ADAPTIVE_CLOCKING
+    pub const ADAPTIVE: Self = Self { raw: 0xFFFF };
+
+    /// Manually specify speed in kHz.
+    ///
+    /// Returns `None` if the value is the invalid value `0xFFFF`. Note that this doesn't mean that
+    /// every other value will be accepted by the device.
+    pub fn khz(khz: u16) -> Option<Self> {
+        if khz == 0xFFFF {
+            None
+        } else {
+            Some(Self { raw: khz })
+        }
     }
 }
 
