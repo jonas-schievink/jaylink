@@ -95,7 +95,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use io::Cursor;
 use log::{debug, trace, warn};
 use std::cell::{Cell, RefCell, RefMut};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use std::{
@@ -1413,6 +1413,12 @@ impl SpeedInfo {
     pub fn max_speed_hz(&self) -> u32 {
         self.base_freq / u32::from(self.min_div)
     }
+
+    /// Returns a `SpeedConfig` that configures the fastest supported speed.
+    pub fn max_speed_config(&self) -> SpeedConfig {
+        let khz = cmp::min(self.max_speed_hz() / 1000, 0xFFFE);
+        SpeedConfig::khz(khz.try_into().unwrap()).unwrap()
+    }
 }
 
 /// Supported SWO capture speed info.
@@ -1460,6 +1466,16 @@ impl SpeedConfig {
             None
         } else {
             Some(Self { raw: khz })
+        }
+    }
+}
+
+impl fmt::Display for SpeedConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.raw == Self::ADAPTIVE.raw {
+            f.write_str("adaptive")
+        } else {
+            write!(f, "{} kHz", self.raw)
         }
     }
 }
