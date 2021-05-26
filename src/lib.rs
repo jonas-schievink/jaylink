@@ -47,7 +47,7 @@
 //!            └───────────┘
 //! ```
 //!
-//! PIC32 ICSP pinout (not yet supported by this library):
+//! PIC32 ICSP pinout (untested):
 //!
 //! ```notrust
 //!            ┌───────────┐
