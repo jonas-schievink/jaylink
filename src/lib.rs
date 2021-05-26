@@ -78,6 +78,8 @@
 // We use explicit lifetimes to make APIs easier to understand (this also affects rustdoc)
 #![allow(clippy::needless_lifetimes)]
 
+#[macro_use]
+mod macros;
 mod bits;
 mod capabilities;
 mod error;
