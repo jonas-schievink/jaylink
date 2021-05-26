@@ -4,7 +4,7 @@ use std::{fmt, ops};
 bitflags! {
     /// Extended capabilities advertised by the device.
     ///
-    /// FIXME the extended capabilities are actually a 256-bit value
+    // FIXME these are actually a 256-bit value, but most bits are unused so u128 works too
     struct CapabilitiesBits: u128 {
         const RESERVED_0 = (1 << 0);  // Reserved, seems to be always set
         const GET_HW_VERSION = (1 << 1);

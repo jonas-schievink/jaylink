@@ -106,8 +106,6 @@ use std::{
 };
 
 /// A result type with the error hardwired to [`Error`].
-///
-/// [`Error`]: struct.Error.html
 pub type Result<T> = std::result::Result<T, Error>;
 
 const VID_SEGGER: u16 = 0x1366;
@@ -218,11 +216,6 @@ impl SwoStatus {
 ///   J-Link device only (ie. most of them).
 /// * [`JayLink::open_usb`]: Opens a specific J-Link device according to the given
 ///   [`UsbDeviceInfo`]. Also see [`scan_usb`].
-///
-/// [`JayLink::open_by_serial`]: struct.JayLink.html#method.open_by_serial
-/// [`JayLink::open_usb`]: struct.JayLink.html#method.open_usb
-/// [`UsbDeviceInfo`]: struct.UsbDeviceInfo.html
-/// [`scan_usb`]: fn.scan_usb.html
 pub struct JayLink {
     handle: rusb::DeviceHandle<rusb::GlobalContext>,
 
@@ -249,10 +242,8 @@ impl JayLink {
     /// Opens an attached J-Link device by its serial number.
     ///
     /// If `serial` is `None`, this will open the only attached J-Link device, and return an error
-    /// of type [`MultipleDevicesFound`] when more than one is attached. This is usually the desired
-    /// behavior of robust applications.
-    ///
-    /// [`MultipleDevicesFound`]: enum.ErrorKind.html#variant.MultipleDevicesFound
+    /// of type [`ErrorKind::MultipleDevicesFound`] when more than one is attached. This is usually
+    /// the desired behavior of robust applications.
     pub fn open_by_serial(serial: Option<&str>) -> Result<Self> {
         let mut devices = scan_usb()?.filter_map(|usb_device| {
             let dev = match usb_device.open() {
@@ -518,8 +509,6 @@ impl JayLink {
     ///
     /// This serial number string can be passed to [`JayLink::open_by_serial`] to open a specific
     /// J-Link device.
-    ///
-    /// [`JayLink::open_by_serial`]: #method.open_by_serial
     pub fn serial_string(&self) -> &str {
         &self.serial
     }
@@ -624,7 +613,7 @@ impl JayLink {
     ///
     /// This requires the [`GET_HW_VERSION`] capability.
     ///
-    /// [`GET_HW_VERSION`]: struct.Capabilities.html#associatedconstant.GET_HW_VERSION
+    /// [`GET_HW_VERSION`]: Capabilities::GET_HW_VERSION
     pub fn read_hardware_version(&self) -> Result<HardwareVersion> {
         self.require_capabilities(Capabilities::GET_HW_VERSION)?;
 
@@ -643,8 +632,7 @@ impl JayLink {
     ///
     /// This requires the [`SPEED_INFO`] capability.
     ///
-    /// [`Interface`]: enum.Interface.html
-    /// [`SPEED_INFO`]: struct.Capabilities.html#associatedconstant.SPEED_INFO
+    /// [`SPEED_INFO`]: Capabilities::SPEED_INFO
     pub fn read_speeds(&self) -> Result<Speeds> {
         self.require_capabilities(Capabilities::SPEED_INFO)?;
 
@@ -664,7 +652,7 @@ impl JayLink {
     ///
     /// This requires the [`SWO`] capability.
     ///
-    /// [`SWO`]: struct.Capabilities.html#associatedconstant.SWO
+    /// [`SWO`]: Capabilities::SWO
     pub fn read_swo_speeds(&self, mode: SwoMode) -> Result<SwoSpeeds> {
         self.require_capabilities(Capabilities::SWO)?;
 
@@ -708,7 +696,7 @@ impl JayLink {
     ///
     /// This requires the [`GET_MAX_BLOCK_SIZE`] capability.
     ///
-    /// [`GET_MAX_BLOCK_SIZE`]: struct.Capabilities.html#associatedconstant.GET_MAX_BLOCK_SIZE
+    /// [`GET_MAX_BLOCK_SIZE`]: Capabilities::GET_MAX_BLOCK_SIZE
     pub fn read_max_mem_block(&self) -> Result<u32> {
         // This cap refers to a nonexistent command `GET_MAX_BLOCK_SIZE`, but it probably means
         // `GET_MAX_MEM_BLOCK`.
@@ -722,7 +710,7 @@ impl JayLink {
         Ok(u32::from_le_bytes(buf))
     }
 
-    /// Returns capabilities advertised by the probe.
+    /// Returns the capabilities advertised by the probe.
     pub fn capabilities(&self) -> Capabilities {
         self.caps
     }
@@ -735,23 +723,20 @@ impl JayLink {
     /// Reads the currently selected target interface.
     ///
     /// **Note**: There is no guarantee that the returned interface is actually supported (ie. it
-    /// might not be in the list returned by [`available_interfaces`]). In particular, some
+    /// might not be in the list returned by [`JayLink::available_interfaces`]). In particular, some
     /// embedded J-Link probes start up with JTAG selected, but only support SWD.
-    ///
-    /// [`available_interfaces`]: #method.available_interfaces
     pub fn current_interface(&self) -> Interface {
         self.interface
     }
 
     /// Selects the interface to use for talking to the target MCU.
     ///
-    /// Switching interfaces will reset the configured transfer speed, so [`set_speed`] needs to be
-    /// called *after* `select_interface`.
+    /// Switching interfaces will reset the configured transfer speed, so [`JayLink::set_speed`]
+    /// needs to be called *after* `select_interface`.
     ///
     /// **Note**: Selecting a different interface may cause the J-Link to perform target I/O!
     ///
-    /// [`set_speed`]: #method.set_speed
-    /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
+    /// [`SELECT_IF`]: Capabilities::SELECT_IF
     pub fn select_interface(&mut self, intf: Interface) -> Result<()> {
         if self.interface == intf {
             return Ok(());
@@ -858,12 +843,11 @@ impl JayLink {
     /// capability is required. Note that adaptive clocking may not work for all target interfaces
     /// (eg. SWD).
     ///
-    /// When the selected target interface is switched (by calling [`select_interface`]), the
-    /// communication speed is reset to some unspecified default value.
+    /// When the selected target interface is switched (by calling [`JayLink::select_interface`], or
+    /// any API method that automatically selects an interface), the communication speed is reset to
+    /// some unspecified default value.
     ///
-    /// [`CommunicationSpeed::ADAPTIVE`]: struct.CommunicationSpeed.html#associatedconstant.ADAPTIVE
-    /// [`ADAPTIVE_CLOCKING`]: struct.Capabilities.html#associatedconstant.ADAPTIVE_CLOCKING
-    /// [`select_interface`]: #method.select_interface
+    /// [`ADAPTIVE_CLOCKING`]: Capabilities::ADAPTIVE_CLOCKING
     pub fn set_speed(&mut self, speed: CommunicationSpeed) -> Result<()> {
         if speed.raw == CommunicationSpeed::ADAPTIVE.raw {
             self.require_capabilities(Capabilities::ADAPTIVE_CLOCKING)?;
@@ -903,7 +887,7 @@ impl JayLink {
     /// **Note**: The 5V supply is protected against overcurrent. Check the device manual for more
     /// information on this.
     ///
-    /// [`SET_KS_POWER`]: struct.Capabilities.html#associatedconstant.SET_KS_POWER
+    /// [`SET_KS_POWER`]: Capabilities::SET_KS_POWER
     pub fn set_kickstart_power(&mut self, enable: bool) -> Result<()> {
         self.require_capabilities(Capabilities::SET_KS_POWER)?;
         self.write_cmd(&[Command::SetKsPower as u8, enable as u8])?;
@@ -918,7 +902,7 @@ impl JayLink {
     /// The data received on `TDO` is returned to the caller as an iterator yielding `bool`s.
     ///
     /// The caller must ensure that the probe is in JTAG mode by calling
-    /// [`select_interface`]`(`[`Interface::Jtag`]`)`.
+    /// [`JayLink::select_interface`]`(`[`Interface::Jtag`]`)`.
     ///
     /// # Parameters
     ///
@@ -931,8 +915,6 @@ impl JayLink {
     /// of them contains more then 65535 bits of data, which is the maximum amount that can be
     /// transferred in one operation.
     ///
-    /// [`select_interface`]: #method.select_interface
-    /// [`Interface::Jtag`]: enum.Interface.html#variant.Jtag
     // NB: Explicit `'a` lifetime used to improve rustdoc output
     pub fn jtag_io<'a, M, D>(&'a mut self, tms: M, tdi: D) -> Result<BitIter<'a>>
     where
@@ -1026,7 +1008,7 @@ impl JayLink {
     /// This requires the [`SELECT_IF`] capability and support for [`Interface::Swd`].
     ///
     /// The caller must ensure that the probe is in SWD mode by calling
-    /// [`select_interface`]`(`[`Interface::Swd`]`)`.
+    /// [`JayLink::select_interface`]`(`[`Interface::Swd`]`)`.
     ///
     /// # Parameters
     ///
@@ -1042,9 +1024,7 @@ impl JayLink {
     /// `dir` = `true`) are undefined, and bits that were read from the target (`dir` = `false`)
     /// will have whatever value the target sent.
     ///
-    /// [`select_interface`]: #method.select_interface
-    /// [`Interface::Swd`]: enum.Interface.html#variant.Swd
-    /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
+    /// [`SELECT_IF`]: Capabilities::SELECT_IF
     // NB: Explicit `'a` lifetime used to improve rustdoc output
     pub fn swd_io<'a, D, S>(&'a mut self, dir: D, swdio: S) -> Result<BitIter<'a>>
     where
@@ -1236,14 +1216,12 @@ impl fmt::Debug for JayLink {
     }
 }
 
-/// A SWO data stream that implements `std::io::Read`.
+/// A SWO data stream that implements [`std::io::Read`].
 ///
 /// This is one way to consume SWO data. The other is to call [`JayLink::swo_read`] after SWO
 /// capturing has been started.
 ///
 /// Reading from this stream will block until some data is captured by the probe.
-///
-/// [`JayLink::swo_read`]: struct.JayLink.html#method.swo_read
 #[derive(Debug)]
 pub struct SwoStream<'a> {
     jaylink: &'a JayLink,
@@ -1321,7 +1299,7 @@ impl<'a> Read for SwoStream<'a> {
     }
 }
 
-/// SWO data that was read via `swo_read`.
+/// SWO data that was read via [`JayLink::swo_read`].
 #[derive(Debug)]
 pub struct SwoData<'a> {
     data: &'a [u8],
@@ -1352,7 +1330,8 @@ impl<'a> Deref for SwoData<'a> {
 
 /// Target communication speed setting.
 ///
-/// This determines the clock frequency of the JTAG/SWD communication.
+/// This determines the clock frequency of the target communication. Supported speeds for the
+/// currently selected target interface can be fetched via [`JayLink::read_speeds`].
 #[derive(Debug, Copy, Clone)]
 pub struct CommunicationSpeed {
     raw: u16,
@@ -1363,7 +1342,7 @@ impl CommunicationSpeed {
     ///
     /// Requires the [`ADAPTIVE_CLOCKING`] capability.
     ///
-    /// [`ADAPTIVE_CLOCKING`]: struct.Capabilities.html#associatedconstant.ADAPTIVE_CLOCKING
+    /// [`ADAPTIVE_CLOCKING`]: Capabilities::ADAPTIVE_CLOCKING
     pub const ADAPTIVE: Self = Self { raw: 0xFFFF };
 
     /// Manually specify speed in kHz.
@@ -1384,8 +1363,6 @@ impl CommunicationSpeed {
 /// Note that the reported hardware version does not allow reliable feature detection, since
 /// embedded J-Link probes might return a hardware version of 1.0.0 despite supporting SWD and other
 /// much newer features.
-///
-/// [`JayLink::read_hardware_version`]: struct.JayLink.html#method.read_hardware_version
 #[derive(Debug)]
 pub struct HardwareVersion(u32);
 
@@ -1496,8 +1473,6 @@ impl SwoSpeeds {
 /// Generic info about a USB device.
 ///
 /// Returned by [`scan_usb`].
-///
-/// [`scan_usb`]: fn.scan_usb.html
 #[derive(Debug)]
 pub struct UsbDeviceInfo {
     inner: rusb::Device<rusb::GlobalContext>,
@@ -1539,9 +1514,6 @@ impl UsbDeviceInfo {
     /// If successful, returns a [`JayLink`] instance.
     ///
     /// This method is equivalent to [`JayLink::open_usb`].
-    ///
-    /// [`JayLink`]: struct.JayLink.html
-    /// [`JayLink::open_usb`]: struct.JayLink.html#method.open_usb
     pub fn open(self) -> Result<JayLink> {
         JayLink::open_usb(self)
     }

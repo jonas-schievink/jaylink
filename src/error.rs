@@ -2,6 +2,9 @@ use std::fmt;
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
+#[allow(unused_imports)] // for intra-doc links
+use crate::{scan_usb, Capabilities, JayLink};
+
 /// List of specific errors that may occur when using this library.
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -18,8 +21,6 @@ pub enum ErrorKind {
     ///
     /// This error occurs when calling [`JayLink::open_by_serial`] while no J-Link device is connected
     /// (or no device matching the serial number is connected).
-    ///
-    /// [`JayLink::open_by_serial`]: struct.JayLink.html#method.open_by_serial
     DeviceNotFound,
 
     /// Automatic device connection failed because multiple devices were found.
@@ -28,9 +29,6 @@ pub enum ErrorKind {
     /// multiple J-Link devices are connected. This library will refuse to "guess" a device and
     /// requires specifying a serial number in this case. The [`scan_usb`] function can also be used
     /// to find a specific device to connect to.
-    ///
-    /// [`JayLink::open_by_serial`]: struct.JayLink.html#method.open_by_serial
-    /// [`scan_usb`]: fn.scan_usb.html
     MultipleDevicesFound,
 
     /// A operation was attempted that is not supported by the probe.
@@ -39,11 +37,8 @@ pub enum ErrorKind {
     /// advertised as optional *capability* bits. This error occurs when the capability bit for an
     /// operation isn't set when that operation is attempted.
     ///
-    /// Capabilities can be read by calling [`JayLink::read_capabilities`], which returns a
+    /// Capabilities can be read by calling [`JayLink::capabilities`], which returns a
     /// [`Capabilities`] bitflags struct.
-    ///
-    /// [`JayLink::read_capabilities`]: struct.JayLink.html#method.read_capabilities
-    /// [`Capabilities`]: struct.Capabilities.html
     MissingCapability,
 
     /// The device does not support the selected target interface.
@@ -61,9 +56,6 @@ pub(crate) trait Cause {
 ///
 /// Errors can be introspected by the user by calling [`Error::kind`] and inspecting the returned
 /// [`ErrorKind`].
-///
-/// [`Error::kind`]: #method.kind
-/// [`ErrorKind`]: enum.ErrorKind.html
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
@@ -101,8 +93,6 @@ impl Error {
     }
 
     /// Returns the [`ErrorKind`] describing this error.
-    ///
-    /// [`ErrorKind`]: enum.ErrorKind.html
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }

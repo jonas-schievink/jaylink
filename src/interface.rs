@@ -108,8 +108,6 @@ impl InterfaceFlags {
 ///
 /// This implements `IntoIterator`, so you can call `.into_iter()` to iterate over the contained
 /// [`Interface`]s.
-///
-/// [`Interface`]: enum.Interface.html
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Interfaces(InterfaceFlags);
 
@@ -155,7 +153,7 @@ impl IntoIterator for Interfaces {
     }
 }
 
-/// Iterator over supported `Interface`s.
+/// Iterator over supported [`Interface`]s.
 #[derive(Debug)]
 pub struct InterfaceIter {
     interfaces: Interfaces,
