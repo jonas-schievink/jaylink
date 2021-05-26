@@ -244,6 +244,9 @@ impl JayLink {
     /// If `serial` is `None`, this will open the only attached J-Link device, and return an error
     /// of type [`ErrorKind::MultipleDevicesFound`] when more than one is attached. This is usually
     /// the desired behavior of robust applications.
+    ///
+    /// **Note**: Probes remember their selected interfaces between reconnections, so it is
+    /// recommended to always call [`JayLink::select_interface`] after opening a probe.
     pub fn open_by_serial(serial: Option<&str>) -> Result<Self> {
         let mut devices = scan_usb()?.filter_map(|usb_device| {
             let dev = match usb_device.open() {
@@ -1107,7 +1110,7 @@ impl JayLink {
         self.require_capabilities(Capabilities::SWO)?;
 
         // The probe must be in SWD mode for SWO capture to work.
-        self.select_interface(Interface::Swd)?;
+        self.require_interface_selected(Interface::Swd)?;
 
         let mut buf = [0; 21];
         buf[0] = Command::Swo as u8;

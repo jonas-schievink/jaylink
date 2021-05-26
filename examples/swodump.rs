@@ -1,3 +1,4 @@
+use jaylink::Interface;
 use jaylink::{JayLink, SwoMode};
 use std::error::Error;
 use std::io::Write;
@@ -41,6 +42,7 @@ fn run(opts: Opts) -> Result<(), Box<dyn Error>> {
     );
     eprintln!("-----------------------------------------");
 
+    probe.select_interface(Interface::Swd)?;
     probe.swo_stop()?;
     let stream = probe.swo_start(SwoMode::Uart, opts.frequency, opts.probe_buf)?;
     let mut stream = itm::Decoder::new(stream, false);
