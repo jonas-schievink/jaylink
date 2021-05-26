@@ -293,8 +293,12 @@ fn run(opts: Opts) -> Result<(), SwdError> {
     probe.select_interface(Interface::Swd)?;
 
     // Limit speed so invalid 0xffff doesn't appear
-    let khz = cmp::min(opts.speed.unwrap_or(200), 0xfffe);
-    probe.set_speed(SpeedConfig::khz(khz).unwrap())?;
+    let speed = opts
+        .speed
+        .map(|khz| SpeedConfig::khz(cmp::min(khz, 0xfffe)).unwrap())
+        .unwrap_or(probe.read_speeds()?.max_speed_config());
+    println!("speed configuration: {}", speed);
+    probe.set_speed(speed)?;
 
     probe.swj_seq()?;
 
