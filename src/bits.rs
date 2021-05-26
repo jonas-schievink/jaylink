@@ -87,7 +87,7 @@ impl fmt::Debug for BitIter<'_> {
     }
 }
 
-pub trait IteratorExt: Sized {
+pub(crate) trait IteratorExt: Sized {
     fn collapse_bytes(self) -> ByteIter<Self>;
 }
 
@@ -97,7 +97,7 @@ impl<I: Iterator<Item = bool>> IteratorExt for I {
     }
 }
 
-pub struct ByteIter<I> {
+pub(crate) struct ByteIter<I> {
     inner: I,
 }
 
