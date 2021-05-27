@@ -2,7 +2,40 @@
 
 ## Unreleased
 
-No changes.
+### New Features
+
+- `HardwareType` now implements `Display`.
+- Add untested and experimental support for additional target interfaces (BDM3,
+  FINE, PIC32 ICSP, SPI, C2, cJTAG, and Microchip 2-wire JTAG).
+- Redesigned the target interface API (breaking change):
+  - `JayLink::available_interfaces` now returns the set of interfaces instead of an opaque iterator.
+- Improved the capabilities API (breaking change):
+  - A new `Capability` enum represents every capability the library knows about.
+  - An opaque `Capabilities` struct represents a set of capabilities advertised by a probe.
+- `swo_start_uart` is now called `swo_start` and handles future support for
+  other encodings (breaking change).
+- Add a `jtag_scan` example that enumerates a scan chain.
+
+### Other Improvements
+
+- Improved documentation.
+- Improved the `list` example to list all interface speeds.
+- Improved the error messages in the `swdump` example.
+- Improved speed defaults in `swdump` and `swodump` examples.
+- Eagerly fetch supported interfaces and capabilities.
+- Update `rusb` to 0.8.
+- Stop automatically selecting SWD when `swo_start` is called, to behave consistently.
+- Redesign the speed info and configuration API to be easier to use:
+  - `Speeds` is now `SpeedInfo`
+  - `SwoSpeeds` is now `SwoSpeedInfo`
+  - `CommunicationSpeed` is now `SpeedConfig`
+  - `max_speed` getters were renamed `max_speed_hz`
+  - A maximum speed `SpeedConfig` can be created via `SpeedInfo::max_speed_config`
+
+### Bug Fixes
+
+- Fix JTAG bitcounting logic.
+- Fix `BitIter::split_off` logic.
 
 ## [0.1.5 - 2020-08-27](https://github.com/jonas-schievink/jaylink/releases/tag/v0.1.5)
 
