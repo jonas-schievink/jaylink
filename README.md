@@ -17,7 +17,7 @@ Add an entry to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-jaylink = "0.1.5"
+jaylink = "0.2.0"
 ```
 
 Check the [API Documentation](https://docs.rs/jaylink/) for how to use the

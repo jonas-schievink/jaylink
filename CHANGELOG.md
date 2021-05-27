@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No changes.
+
+## [0.2.0 - 2021-05-27](https://github.com/jonas-schievink/jaylink/releases/tag/v0.2.0)
+
 ### New Features
 
 - `HardwareType` now implements `Display`.
