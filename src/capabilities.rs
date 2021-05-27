@@ -1,109 +1,72 @@
-use bitflags::bitflags;
-use std::{fmt, ops};
+#![allow(non_upper_case_globals)]
 
-bitflags! {
-    /// Extended capabilities advertised by the device.
+use std::fmt;
+
+enum_and_set!(
+    /// List of capabilities that may be advertised by a probe.
     ///
-    // FIXME these are actually a 256-bit value, but most bits are unused so u128 works too
-    struct CapabilitiesBits: u128 {
-        const RESERVED_0 = (1 << 0);  // Reserved, seems to be always set
-        const GET_HW_VERSION = (1 << 1);
-        const WRITE_DCC = (1 << 2);
-        const ADAPTIVE_CLOCKING = (1 << 3);
-        const READ_CONFIG = (1 << 4);
-        const WRITE_CONFIG = (1 << 5);
-        const TRACE = (1 << 6);
-        const WRITE_MEM = (1 << 7);
-        const READ_MEM = (1 << 8);
-        const SPEED_INFO = (1 << 9);
-        const EXEC_CODE = (1 << 10);
-        const GET_MAX_BLOCK_SIZE = (1 << 11);
-        const GET_HW_INFO = (1 << 12);
-        const SET_KS_POWER = (1 << 13);
-        const RESET_STOP_TIMED = (1 << 14);
+    /// Not many of these are actually used, and a lot of these have unknown meaning.
+    #[non_exhaustive]
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub enum Capability {
+        Reserved0 = 0,  // Reserved, seems to be always set
+        GetHwVersion = 1,
+        WriteDcc = 2,
+        AdaptiveClocking = 3,
+        ReadConfig = 4,
+        WriteConfig = 5,
+        Trace = 6,
+        WriteMem = 7,
+        ReadMem = 8,
+        SpeedInfo = 9,
+        ExecCode = 10,
+        GetMaxBlockSize = 11,
+        GetHwInfo = 12,
+        SetKsPower = 13,
+        ResetStopTimed = 14,
         // 15 = Reserved, seems to never be set
-        const MEASURE_RTCK_REACT = (1 << 16);
-        const SELECT_IF = (1 << 17);
-        const RW_MEM_ARM79 = (1 << 18);
-        const GET_COUNTERS = (1 << 19);
-        const READ_DCC = (1 << 20);
-        const GET_CPU_CAPS = (1 << 21);
-        const EXEC_CPU_CMD = (1 << 22);
-        const SWO = (1 << 23);
-        const WRITE_DCC_EX = (1 << 24);
-        const UPDATE_FIRMWARE_EX = (1 << 25);
-        const FILE_IO = (1 << 26);
-        const REGISTER = (1 << 27);
-        const INDICATORS = (1 << 28);
-        const TEST_NET_SPEED = (1 << 29);
-        const RAWTRACE = (1 << 30);
+        MeasureRtckReact = 16,
+        SelectIf = 17,
+        RwMemArm79 = 18,
+        GetCounters = 19,
+        ReadDcc = 20,
+        GetCpuCaps = 21,
+        ExecCpuCmd = 22,
+        Swo = 23,
+        WriteDccEx = 24,
+        UpdateFirmwareEx = 25,
+        FileIo = 26,
+        Register = 27,
+        Indicators = 28,
+        TestNetSpeed = 29,
+        RawTrace = 30,
         // For the legacy capabilities, bit 31 is documented as reserved, but it must be
         // GET_CAPS_EX, since there'd be no other way to know if GET_CAPS_EX is supported.
-        const GET_CAPS_EX = (1 << 31);
+        GetCapsEx = 31,
 
         // Extended capabilities
 
-        const HW_JTAG_WRITE = (1 << 32);
-        const COM = (1 << 33);
+        HwJtagWrite = 32,
+        Com = 33,
+    }
+
+    flags CapabilityFlags: u128;
+);
+
+impl CapabilityFlags {
+    fn from_capability(cap: Capability) -> Self {
+        Self::from_bits(1 << cap as u32).unwrap()
     }
 }
 
-/// Set of capabilities advertised by the device.
+/// A set of capabilities advertised by a probe.
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub struct Capabilities {
-    inner: CapabilitiesBits,
-}
-
-macro_rules! import_capabilities {
-    (
-        $(
-            $name:ident,
-        )+
-    ) => {
-        $(
-            pub const $name: Self = Self { inner: CapabilitiesBits::$name };
-        )+
-    };
-}
+pub struct Capabilities(CapabilityFlags);
 
 impl Capabilities {
-    import_capabilities![
-        GET_HW_VERSION,
-        WRITE_DCC,
-        ADAPTIVE_CLOCKING,
-        READ_CONFIG,
-        WRITE_CONFIG,
-        TRACE,
-        WRITE_MEM,
-        READ_MEM,
-        SPEED_INFO,
-        EXEC_CODE,
-        GET_MAX_BLOCK_SIZE,
-        GET_HW_INFO,
-        SET_KS_POWER,
-        RESET_STOP_TIMED,
-        MEASURE_RTCK_REACT,
-        SELECT_IF,
-        RW_MEM_ARM79,
-        GET_COUNTERS,
-        READ_DCC,
-        GET_CPU_CAPS,
-        EXEC_CPU_CMD,
-        SWO,
-        WRITE_DCC_EX,
-        UPDATE_FIRMWARE_EX,
-        FILE_IO,
-        REGISTER,
-        INDICATORS,
-        TEST_NET_SPEED,
-        RAWTRACE,
-        GET_CAPS_EX,
-        HW_JTAG_WRITE,
-    ];
-
     /// Creates a `Capabilities` instance from 32 raw bits.
     pub(crate) fn from_raw_legacy(raw: u32) -> Self {
-        let mut capabilities = CapabilitiesBits::from_bits_truncate(u128::from(raw));
+        let mut capabilities = CapabilityFlags::from_bits_truncate(u128::from(raw));
         if capabilities.bits() != u128::from(raw) {
             log::debug!(
                 "unknown capability bits: 0x{:08X} truncated to 0x{:08X} ({:?})",
@@ -113,10 +76,8 @@ impl Capabilities {
             );
         }
         // Hide reserved bits from user-facing output.
-        capabilities.remove(CapabilitiesBits::RESERVED_0);
-        Self {
-            inner: capabilities,
-        }
+        capabilities.remove(CapabilityFlags::Reserved0);
+        Self(capabilities)
     }
 
     /// Creates a `Capabilities` instance from a 256-bit bitset.
@@ -130,7 +91,7 @@ impl Capabilities {
         let mut bytes = [0; 16];
         bytes.copy_from_slice(&raw[..16]);
         let raw = u128::from_le_bytes(bytes);
-        let mut capabilities = CapabilitiesBits::from_bits_truncate(raw);
+        let mut capabilities = CapabilityFlags::from_bits_truncate(raw);
         if capabilities.bits() != raw {
             log::debug!(
                 "unknown ext. capability bits: 0x{:08X} truncated to 0x{:08X} ({:?})",
@@ -140,32 +101,23 @@ impl Capabilities {
             );
         }
         // Hide reserved bits from user-facing output.
-        capabilities.remove(CapabilitiesBits::RESERVED_0);
-        Self {
-            inner: capabilities,
-        }
+        capabilities.remove(CapabilityFlags::Reserved0);
+        Self(capabilities)
     }
 
-    /// Determines whether `self` contains all capabilities in `other`.
-    pub fn contains(&self, other: Self) -> bool {
-        self.inner.contains(other.inner)
+    /// Determines whether `self` contains capability `cap`.
+    pub fn contains(&self, cap: Capability) -> bool {
+        self.0.contains(CapabilityFlags::from_capability(cap))
+    }
+
+    /// Determines whether `self` contains all capabilities in `caps`.
+    pub fn contains_all(&self, caps: Capabilities) -> bool {
+        self.0.contains(caps.0)
     }
 }
 
 impl fmt::Debug for Capabilities {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.inner.fmt(f)
+        self.0.fmt(f)
     }
 }
-
-impl ops::BitOr for Capabilities {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self {
-        Self {
-            inner: self.inner | rhs.inner,
-        }
-    }
-}
-
-// FIXME: Split up into `Capabilities` bitset and `Capability` enum?

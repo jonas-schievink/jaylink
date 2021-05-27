@@ -86,7 +86,7 @@ mod error;
 mod interface;
 
 pub use self::bits::BitIter;
-pub use self::capabilities::Capabilities;
+pub use self::capabilities::{Capabilities, Capability};
 pub use self::error::{Error, ErrorKind};
 pub use self::interface::{Interface, InterfaceIter, Interfaces};
 
@@ -451,13 +451,13 @@ impl JayLink {
 
         // If the `GET_CAPS_EX` capability is set, use the extended capability command to fetch
         // all the capabilities.
-        if caps.contains(Capabilities::GET_CAPS_EX) {
+        if caps.contains(Capability::GetCapsEx) {
             self.write_cmd(&[Command::GetCapsEx as u8])?;
 
             let mut buf = [0; 32];
             self.read(&mut buf)?;
             let real_caps = Capabilities::from_raw_ex(buf);
-            if !real_caps.contains(caps) {
+            if !real_caps.contains_all(caps) {
                 return Err(format!(
                     "ext. caps are not a superset of legacy caps (legacy: {:?}, ex: {:?})",
                     caps, real_caps
@@ -475,7 +475,7 @@ impl JayLink {
     }
 
     fn fill_interfaces(&mut self) -> Result<()> {
-        if !self.capabilities().contains(Capabilities::SELECT_IF) {
+        if !self.capabilities().contains(Capability::SelectIf) {
             // Pre-SELECT_IF probes only support JTAG.
             self.interfaces = Interfaces::single(Interface::Jtag);
             self.interface = Interface::Jtag;
@@ -552,7 +552,7 @@ impl JayLink {
         Ok(())
     }
 
-    fn require_capabilities(&self, cap: Capabilities) -> Result<()> {
+    fn require_capability(&self, cap: Capability) -> Result<()> {
         if self.capabilities().contains(cap) {
             Ok(())
         } else {
@@ -609,11 +609,9 @@ impl JayLink {
 
     /// Reads the hardware version from the device.
     ///
-    /// This requires the [`GET_HW_VERSION`] capability.
-    ///
-    /// [`GET_HW_VERSION`]: Capabilities::GET_HW_VERSION
+    /// This requires the probe to support [`Capability::GetHwVersion`].
     pub fn read_hardware_version(&self) -> Result<HardwareVersion> {
-        self.require_capabilities(Capabilities::GET_HW_VERSION)?;
+        self.require_capability(Capability::GetHwVersion)?;
 
         self.write_cmd(&[Command::GetHwVersion as u8])?;
 
@@ -628,11 +626,9 @@ impl JayLink {
     /// Supported speeds may differ between [`Interface`]s, so the right interface needs to be
     /// selected for the returned value to make sense.
     ///
-    /// This requires the [`SPEED_INFO`] capability.
-    ///
-    /// [`SPEED_INFO`]: Capabilities::SPEED_INFO
+    /// This requires the probe to support [`Capability::SpeedInfo`].
     pub fn read_speeds(&self) -> Result<SpeedInfo> {
-        self.require_capabilities(Capabilities::SPEED_INFO)?;
+        self.require_capability(Capability::SpeedInfo)?;
 
         self.write_cmd(&[Command::GetSpeeds as u8])?;
 
@@ -648,11 +644,9 @@ impl JayLink {
 
     /// Reads the probe's SWO capture speed information.
     ///
-    /// This requires the [`SWO`] capability.
-    ///
-    /// [`SWO`]: Capabilities::SWO
+    /// This requires the probe to support [`Capability::Swo`].
     pub fn read_swo_speeds(&self, mode: SwoMode) -> Result<SwoSpeedInfo> {
-        self.require_capabilities(Capabilities::SWO)?;
+        self.require_capability(Capability::Swo)?;
 
         let mut buf = [0; 9];
         buf[0] = Command::Swo as u8;
@@ -692,13 +686,11 @@ impl JayLink {
 
     /// Reads the maximum mem block size in Bytes.
     ///
-    /// This requires the [`GET_MAX_BLOCK_SIZE`] capability.
-    ///
-    /// [`GET_MAX_BLOCK_SIZE`]: Capabilities::GET_MAX_BLOCK_SIZE
+    /// This requires the probe to support [`Capability::GetMaxBlockSize`].
     pub fn read_max_mem_block(&self) -> Result<u32> {
         // This cap refers to a nonexistent command `GET_MAX_BLOCK_SIZE`, but it probably means
         // `GET_MAX_MEM_BLOCK`.
-        self.require_capabilities(Capabilities::GET_MAX_BLOCK_SIZE)?;
+        self.require_capability(Capability::GetMaxBlockSize)?;
 
         self.write_cmd(&[Command::GetMaxMemBlock as u8])?;
 
@@ -732,15 +724,15 @@ impl JayLink {
     /// Switching interfaces will reset the configured transfer speed, so [`JayLink::set_speed`]
     /// needs to be called *after* `select_interface`.
     ///
-    /// **Note**: Selecting a different interface may cause the J-Link to perform target I/O!
+    /// This requires the probe to support [`Capability::SelectIf`].
     ///
-    /// [`SELECT_IF`]: Capabilities::SELECT_IF
+    /// **Note**: Selecting a different interface may cause the J-Link to perform target I/O!
     pub fn select_interface(&mut self, intf: Interface) -> Result<()> {
         if self.interface == intf {
             return Ok(());
         }
 
-        self.require_capabilities(Capabilities::SELECT_IF)?;
+        self.require_capability(Capability::SelectIf)?;
 
         self.require_interface_supported(intf)?;
 
@@ -837,17 +829,16 @@ impl JayLink {
 
     /// Sets the target communication speed.
     ///
-    /// If `speed` is set to [`SpeedConfig::ADAPTIVE`], then the [`ADAPTIVE_CLOCKING`] capability is
-    /// required. Note that adaptive clocking may not work for all target interfaces (eg. SWD).
+    /// If `speed` is set to [`SpeedConfig::ADAPTIVE`], then the probe has to support
+    /// [`Capability::AdaptiveClocking`]. Note that adaptive clocking may not work for all target
+    /// interfaces (eg. SWD).
     ///
     /// When the selected target interface is switched (by calling [`JayLink::select_interface`], or
     /// any API method that automatically selects an interface), the communication speed is reset to
     /// some unspecified default value.
-    ///
-    /// [`ADAPTIVE_CLOCKING`]: Capabilities::ADAPTIVE_CLOCKING
     pub fn set_speed(&mut self, speed: SpeedConfig) -> Result<()> {
         if speed.raw == SpeedConfig::ADAPTIVE.raw {
-            self.require_capabilities(Capabilities::ADAPTIVE_CLOCKING)?;
+            self.require_capability(Capability::AdaptiveClocking)?;
         }
 
         let mut buf = [Command::SetSpeed as u8, 0, 0];
@@ -873,7 +864,7 @@ impl JayLink {
 
     /// Enables or disables the 5V Power supply on pin 19.
     ///
-    /// This requires the [`SET_KS_POWER`] capability.
+    /// This requires the probe to support [`Capability::SetKsPower`].
     ///
     /// **Note**: The startup state of the power supply can be configured in non-volatile memory.
     ///
@@ -886,7 +877,7 @@ impl JayLink {
     ///
     /// [`SET_KS_POWER`]: Capabilities::SET_KS_POWER
     pub fn set_kickstart_power(&mut self, enable: bool) -> Result<()> {
-        self.require_capabilities(Capabilities::SET_KS_POWER)?;
+        self.require_capability(Capability::SetKsPower)?;
         self.write_cmd(&[Command::SetKsPower as u8, enable as u8])?;
         Ok(())
     }
@@ -925,7 +916,7 @@ impl JayLink {
         // version 5 and above, which adds the 3rd command. Unfortunately we cannot reliably use the
         // HW version to determine this since some embedded J-Link probes have a HW version of
         // 1.0.0, but still support SWD, so we use the `SELECT_IF` capability instead.
-        let cmd = if self.capabilities().contains(Capabilities::SELECT_IF) {
+        let cmd = if self.capabilities().contains(Capability::SelectIf) {
             // Use the new JTAG3 command, make sure to select the JTAG interface mode
             self.select_interface(Interface::Jtag)?;
             has_status_byte = true;
@@ -1002,7 +993,8 @@ impl JayLink {
 
     /// Performs an SWD I/O operation.
     ///
-    /// This requires the [`SELECT_IF`] capability and support for [`Interface::Swd`].
+    /// This requires the probe to support [`Capability::SelectIf`] and support for
+    /// [`Interface::Swd`].
     ///
     /// The caller must ensure that the probe is in SWD mode by calling
     /// [`JayLink::select_interface`]`(`[`Interface::Swd`]`)`.
@@ -1020,8 +1012,6 @@ impl JayLink {
     /// An iterator over the `SWDIO` bits is returned. Bits that were sent to the target (where
     /// `dir` = `true`) are undefined, and bits that were read from the target (`dir` = `false`)
     /// will have whatever value the target sent.
-    ///
-    /// [`SELECT_IF`]: Capabilities::SELECT_IF
     // NB: Explicit `'a` lifetime used to improve rustdoc output
     pub fn swd_io<'a, D, S>(&'a mut self, dir: D, swdio: S) -> Result<BitIter<'a>>
     where
@@ -1081,7 +1071,7 @@ impl JayLink {
     ///
     /// This will switch the probe to SWD interface mode if necessary (required for SWO capture).
     ///
-    /// Requires the [`SWO`] and [`SELECT_IF`] capabilities.
+    /// Requires the probe to support [`Capability::Swo`].
     ///
     /// # Parameters
     ///
@@ -1089,8 +1079,8 @@ impl JayLink {
     /// - `speed`: The data rate to capture at (when using [`SwoMode::Uart`], this is the UART baud
     ///   rate).
     /// - `buf_size`: The size (in Bytes) of the on-device buffer to allocate for the SWO data. You
-    ///   can call [`read_max_mem_block`] to get an approximation of the available memory on the
-    ///   probe.
+    ///   can call [`JayLink::read_max_mem_block`] to get an approximation of the available memory
+    ///   on the probe.
     ///
     /// # Return Value
     ///
@@ -1098,17 +1088,13 @@ impl JayLink {
     /// data via [`std::io::Read`]. If blocking reads are undesired (or the [`JayLink`] instance
     /// needs to be used for something else while SWO capture is in progress), the [`SwoStream`]
     /// can be ignored and [`JayLink::swo_read`] be used instead.
-    ///
-    /// [`SWO`]: struct.Capabilities.html#associatedconstant.SWO
-    /// [`SELECT_IF`]: struct.Capabilities.html#associatedconstant.SELECT_IF
-    /// [`read_max_mem_block`]: #method.read_max_mem_block
     pub fn swo_start<'a>(
         &'a mut self,
         mode: SwoMode,
         speed: u32,
         buf_size: u32,
     ) -> Result<SwoStream<'a>> {
-        self.require_capabilities(Capabilities::SWO)?;
+        self.require_capability(Capability::Swo)?;
 
         // The probe must be in SWD mode for SWO capture to work.
         self.require_interface_selected(Interface::Swd)?;
@@ -1145,7 +1131,7 @@ impl JayLink {
 
     /// Stops capturing SWO data.
     pub fn swo_stop(&mut self) -> Result<()> {
-        self.require_capabilities(Capabilities::SWO)?;
+        self.require_capability(Capability::Swo)?;
 
         let buf = [
             Command::Swo as u8,
@@ -1454,9 +1440,7 @@ pub struct SpeedConfig {
 impl SpeedConfig {
     /// Let the J-Link probe decide the speed.
     ///
-    /// Requires the [`ADAPTIVE_CLOCKING`] capability.
-    ///
-    /// [`ADAPTIVE_CLOCKING`]: Capabilities::ADAPTIVE_CLOCKING
+    /// Requires the probe to support [`Capability::AdaptiveClocking`].
     pub const ADAPTIVE: Self = Self { raw: 0xFFFF };
 
     /// Manually specify speed in kHz.

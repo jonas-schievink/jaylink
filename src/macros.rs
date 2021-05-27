@@ -19,6 +19,7 @@ macro_rules! enum_and_set {
         }
 
         impl $enum_name {
+            #[allow(dead_code)]
             const ALL: &'static [Self] = &[
                 $( Self::$name ),+
             ];
