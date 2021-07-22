@@ -238,6 +238,7 @@ pub struct Connection {
 ///   [`UsbDeviceInfo`]. Also see [`scan_usb`].
 pub struct JayLink {
     handle: rusb::DeviceHandle<rusb::GlobalContext>,
+    conn: Option<Connection>,
 
     read_ep: u8,
     write_ep: u8,
@@ -449,10 +450,19 @@ impl JayLink {
             caps: Capabilities::from_raw_legacy(0), // dummy value
             interface: Interface::Spi,              // dummy value, must not be JTAG
             interfaces: Interfaces::from_bits_warn(0), // dummy value
+            conn: None,
             handle,
         };
         this.fill_capabilities()?;
         this.fill_interfaces()?;
+
+        let mut conn = Connection::default();
+        if this.caps.contains(Capability::Register) {
+            debug!("Registering connection");
+            this.register(&mut conn)?;
+            debug!("Got handle {}", conn.handle);
+            this.conn = Some(conn);
+        }
 
         Ok(this)
     }
@@ -1264,6 +1274,14 @@ impl JayLink {
         self.read(buf)?;
 
         Ok(SwoData { data: buf, status })
+    }
+}
+
+impl Drop for JayLink {
+    fn drop(&mut self) {
+        if let Some(ref conn) = self.conn {
+            let _ = self.unregister(conn);
+        }
     }
 }
 
