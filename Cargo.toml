@@ -14,7 +14,6 @@ license = "0BSD"
 # cargo-release configuration
 [package.metadata.release]
 tag-message = "{{version}}"
-no-dev-version = true
 pre-release-commit-message = "Release {{version}}"
 
 # Change the changelog's `Unreleased` section to refer to this release and
