@@ -1,6 +1,6 @@
 [package]
 name = "jaylink"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Jonas Schievink <jonasschievink@gmail.com>"]
 edition = "2018"
 description = "Library to communicate with J-Link USB devices"

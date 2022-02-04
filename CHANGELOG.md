@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No changes.
+
+## [0.3.0 - 2022-02-04](https://github.com/jonas-schievink/jaylink/releases/tag/v0.3.0)
+
 - Update `rusb` dependency to 0.9 ([#37]).
 - Reduce MSRV promise to "latest stable".
 
