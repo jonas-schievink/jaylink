@@ -41,10 +41,6 @@ file    = "src/lib.rs"
 search  = "https://docs.rs/jaylink/[a-z0-9\\.-]+"
 replace = "https://docs.rs/jaylink/{{version}}"
 
-[badges]
-travis-ci = { repository = "jonas-schievink/jaylink" }
-maintenance = { status = "actively-developed" }
-
 [dev-dependencies]
 version-sync = "0.9"
 env_logger = "0.8.1"
