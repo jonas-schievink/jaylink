@@ -162,6 +162,15 @@ enum Command {
 
     ReadConfig = 0xF2,
     WriteConfig = 0xF3,
+
+    Register = 0x09,
+}
+
+#[repr(u8)]
+#[allow(dead_code)]
+enum RegisterCommand {
+    Register = 0x64,
+    Unregister = 0x65,
 }
 
 #[repr(u8)]
@@ -208,6 +217,15 @@ impl SwoStatus {
     }
 }
 
+#[derive(Default, Debug)]
+pub struct Connection {
+    pub handle: u16,
+    pub pid: u32,
+    pub hid: Option<std::net::Ipv4Addr>,
+    pub iid: u8,
+    pub cid: u8,
+}
+
 /// A handle to a J-Link USB device.
 ///
 /// This is the main interface type of this library. There are multiple ways of obtaining an
@@ -220,6 +238,7 @@ impl SwoStatus {
 ///   [`UsbDeviceInfo`]. Also see [`scan_usb`].
 pub struct JayLink {
     handle: rusb::DeviceHandle<rusb::GlobalContext>,
+    conn: Option<Connection>,
 
     read_ep: u8,
     write_ep: u8,
@@ -431,10 +450,19 @@ impl JayLink {
             caps: Capabilities::from_raw_legacy(0), // dummy value
             interface: Interface::Spi,              // dummy value, must not be JTAG
             interfaces: Interfaces::from_bits_warn(0), // dummy value
+            conn: None,
             handle,
         };
         this.fill_capabilities()?;
         this.fill_interfaces()?;
+
+        let mut conn = Connection::default();
+        if this.caps.contains(Capability::Register) {
+            debug!("Registering connection");
+            this.register(&mut conn)?;
+            debug!("Got handle {}", conn.handle);
+            this.conn = Some(conn);
+        }
 
         Ok(this)
     }
@@ -882,6 +910,59 @@ impl JayLink {
         Ok(())
     }
 
+    /// Registers a connection on the device.
+    /// Updates the Connection with the returned handle number.
+    ///
+    /// This requires the [`Register`] capability.
+    ///
+    /// **Note**: This may be **required** on some devices for SWD to work at all.
+    ///
+    /// [`Register`]: Capability::Register
+    pub fn register(&self, conn: &mut Connection) -> Result<()> {
+        let handle = self.raw_register(conn, RegisterCommand::Register)?;
+        conn.handle = handle;
+        Ok(())
+    }
+
+    /// Unregisters a connection on the device.
+    ///
+    /// This requires the [`Register`] capability.
+    ///
+    /// [`Register`]: Capability::Register
+    pub fn unregister(&self, conn: &Connection) -> Result<()> {
+        self.raw_register(conn, RegisterCommand::Unregister)
+            .map(|_| ())
+    }
+
+    fn raw_register(&self, conn: &Connection, cmd: RegisterCommand) -> Result<u16> {
+        self.require_capability(Capability::Register)?;
+        let mut buf = [0; 14];
+        buf[0] = Command::Register as u8;
+        buf[1] = cmd as u8;
+        buf[2..6].copy_from_slice(&conn.pid.to_le_bytes());
+        buf[6..10].copy_from_slice(
+            &u32::from(conn.hid.unwrap_or(std::net::Ipv4Addr::UNSPECIFIED)).to_be_bytes(),
+        );
+        buf[10] = conn.iid;
+        buf[11] = conn.cid;
+        buf[12..14].copy_from_slice(&conn.handle.to_le_bytes());
+        self.write_cmd(&buf)?;
+
+        // Receive connection table
+        let mut buf = [0; 76];
+        self.read(&mut buf)?;
+        let new_handle = u16::from_le_bytes([buf[0], buf[1]]);
+        let num_entries = u16::from_le_bytes([buf[2], buf[3]]);
+        let entry_size = u16::from_le_bytes([buf[4], buf[5]]);
+        let info_size = u16::from_le_bytes([buf[6], buf[7]]);
+        let all_size = 8 + (num_entries * entry_size) + info_size;
+        if all_size > 76 {
+            let mut extra_buf = vec![0; (all_size - 76) as usize];
+            self.read(&mut extra_buf)?;
+        }
+        Ok(new_handle)
+    }
+
     /// Performs a JTAG I/O operation.
     ///
     /// This will shift out data on `TMS` (pin 7) and `TDI` (pin 5), while reading data shifted
@@ -1193,6 +1274,14 @@ impl JayLink {
         self.read(buf)?;
 
         Ok(SwoData { data: buf, status })
+    }
+}
+
+impl Drop for JayLink {
+    fn drop(&mut self) {
+        if let Some(ref conn) = self.conn {
+            let _ = self.unregister(conn);
+        }
     }
 }
 
