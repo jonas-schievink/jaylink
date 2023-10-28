@@ -147,20 +147,17 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
 }
 
 macro_rules! error_mapping {
-    (
-        $(
-            $errty:ty => $kind:ident,
-        )+
-    ) => {
-        $(
-            impl Cause for $errty {
-                const KIND: ErrorKind = ErrorKind::$kind;
-            }
-        )+
+    ($errty:ty => $kind:ident) => {
+        impl Cause for $errty {
+            const KIND: ErrorKind = ErrorKind::$kind;
+        }
     };
 }
 
-error_mapping! {
-    rusb::Error => Usb,
-    String => Other,
-}
+#[cfg(not(feature = "nusb"))]
+error_mapping!(rusb::Error => Usb);
+#[cfg(feature = "nusb")]
+error_mapping!(std::io::Error => Usb);
+#[cfg(feature = "nusb")]
+error_mapping!(nusb::transfer::TransferError => Usb);
+error_mapping!(String => Other);
