@@ -21,10 +21,9 @@ fn run() -> Result<()> {
     for devinfo in list {
         println!();
         print!(
-            "Bus {:03} Address {:03} Port {:03}: VID={:04x} PID={:04X} – ",
+            "Bus {:03} Address {:03}: VID={:04x} PID={:04X} – ",
             devinfo.bus_number(),
             devinfo.address(),
-            devinfo.port_number(),
             devinfo.vid(),
             devinfo.pid(),
         );

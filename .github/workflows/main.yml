@@ -23,28 +23,16 @@ jobs:
       RUSTFLAGS: "--deny warnings"
     steps:
     - uses: actions/checkout@v1
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
     - name: Run Tests
-      run: cargo test --verbose
+      run: cargo test --verbose --features rusb
 
   lint:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: rustfmt, clippy
     - name: Check code formatting
       run: cargo fmt -- --check
-    - name: Run Clippy
-      uses: actions-rs/clippy-check@v1
-      with:
-        args: --all-targets
-        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Run Clippy rusb
+      run: cargo clippy --features rusb
+    - name: Run Clippy nusb
+      run: cargo clippy --features nusb

@@ -78,6 +78,9 @@
 // We use explicit lifetimes to make APIs easier to understand (this also affects rustdoc)
 #![allow(clippy::needless_lifetimes)]
 
+#[cfg(not(any(feature = "rusb", feature = "nusb")))]
+compile_error!("You must enable one of the following features: `rusb`, `nusb`");
+
 #[macro_use]
 mod macros;
 mod bits;
@@ -98,7 +101,6 @@ use io::Cursor;
 use log::{debug, trace, warn};
 use std::cell::{Cell, RefCell, RefMut};
 use std::convert::{TryFrom, TryInto};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use std::{
     cmp, fmt,
@@ -112,6 +114,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 const VID_SEGGER: u16 = 0x1366;
 
+#[cfg(not(feature = "nusb"))]
 const TIMEOUT_DEFAULT: Duration = Duration::from_millis(500);
 
 #[repr(u8)]
@@ -219,7 +222,10 @@ impl SwoStatus {
 /// * [`JayLink::open_usb`]: Opens a specific J-Link device according to the given
 ///   [`UsbDeviceInfo`]. Also see [`scan_usb`].
 pub struct JayLink {
+    #[cfg(not(feature = "nusb"))]
     handle: rusb::DeviceHandle<rusb::GlobalContext>,
+    #[cfg(feature = "nusb")]
+    handle: nusb::Interface,
 
     read_ep: u8,
     write_ep: u8,
@@ -293,6 +299,11 @@ impl JayLink {
     /// **Note**: Probes remember their selected interfaces between reconnections, so it is
     /// recommended to always call [`JayLink::select_interface`] after opening a probe.
     pub fn open_usb(usb_device: UsbDeviceInfo) -> Result<Self> {
+        Self::open_usb_inner(usb_device)
+    }
+
+    #[cfg(not(feature = "nusb"))]
+    fn open_usb_inner(usb_device: UsbDeviceInfo) -> Result<Self> {
         // NB: We take `UsbDeviceInfo` by value since it isn't cloneable (yet), so taking it by-ref
         // would lock us into a less flexible API. It should be easy to make it cloneable with a few
         // changes to rusb though.
@@ -439,6 +450,130 @@ impl JayLink {
         Ok(this)
     }
 
+    #[cfg(feature = "nusb")]
+    fn open_usb_inner(usb_device: UsbDeviceInfo) -> Result<Self> {
+        use nusb::transfer::{Direction, EndpointType};
+
+        fn open_error(e: std::io::Error, while_: &'static str) -> Error {
+            let inner: Box<dyn std::error::Error + Send + Sync> = if cfg!(windows) {
+                format!(
+                    "{} (this error may be caused by not having the \
+                        WinUSB driver installed; use Zadig (https://zadig.akeo.ie/) to install it \
+                        for the J-Link device; this will replace the SEGGER J-Link driver)",
+                    e
+                )
+                .into()
+            } else {
+                Box::new(e)
+            };
+
+            Error::with_while(ErrorKind::Usb, inner, while_)
+        }
+
+        let handle = usb_device
+            .inner
+            .open()
+            .map_err(|e| open_error(e, "opening USB device"))?;
+
+        let configs: Vec<_> = handle.configurations().collect();
+
+        if configs.len() != 1 {
+            warn!("device has {} configurations, expected 1", configs.len());
+        }
+
+        let conf = &configs[0];
+        debug!("scanning {} interfaces", conf.interfaces().count());
+        trace!("active configuration descriptor: {:#x?}", conf);
+
+        let mut jlink_intf = None;
+        for intf in conf.interfaces() {
+            trace!("interface #{} descriptors:", intf.interface_number());
+
+            for descr in intf.alt_settings() {
+                trace!("{:#x?}", descr);
+
+                // We detect the proprietary J-Link interface using the vendor-specific class codes
+                // and the endpoint properties
+                if descr.class() == 0xff && descr.subclass() == 0xff && descr.protocol() == 0xff {
+                    if let Some((intf, _, _)) = jlink_intf {
+                        return Err(format!(
+                            "found multiple matching USB interfaces ({} and {})",
+                            intf,
+                            descr.interface_number()
+                        ))
+                        .jaylink_err();
+                    }
+
+                    let endpoints: Vec<_> = descr.endpoints().collect();
+                    trace!("endpoint descriptors: {:#x?}", endpoints);
+                    if endpoints.len() != 2 {
+                        warn!("vendor-specific interface with {} endpoints, expected 2 (skipping interface)", endpoints.len());
+                        continue;
+                    }
+
+                    if !endpoints
+                        .iter()
+                        .all(|ep| ep.transfer_type() == EndpointType::Bulk)
+                    {
+                        warn!(
+                            "encountered non-bulk endpoints, skipping interface: {:#x?}",
+                            endpoints
+                        );
+                        continue;
+                    }
+
+                    let (read_ep, write_ep) = if endpoints[0].direction() == Direction::In {
+                        (endpoints[0].address(), endpoints[1].address())
+                    } else {
+                        (endpoints[1].address(), endpoints[0].address())
+                    };
+
+                    jlink_intf = Some((descr.interface_number(), read_ep, write_ep));
+                    debug!("J-Link interface is #{}", descr.interface_number());
+                }
+            }
+        }
+
+        let (intf, read_ep, write_ep) = if let Some(intf) = jlink_intf {
+            intf
+        } else {
+            return Err("device is not a J-Link device".to_string()).jaylink_err();
+        };
+
+        let handle = handle
+            .claim_interface(intf)
+            .map_err(|e| open_error(e, "taking control over USB device"))?;
+
+        let mut this = Self {
+            manufacturer: usb_device
+                .inner
+                .manufacturer_string()
+                .unwrap_or("Unknown")
+                .to_string(),
+            product: usb_device
+                .inner
+                .product_string()
+                .unwrap_or("Unknown")
+                .to_string(),
+            serial: usb_device
+                .inner
+                .serial_number()
+                .unwrap_or("Unknown")
+                .to_string(),
+            read_ep,
+            write_ep,
+            cmd_buf: RefCell::new(Vec::new()),
+            caps: Capabilities::from_raw_legacy(0), // dummy value
+            interface: Interface::Spi,              // dummy value, must not be JTAG
+            interfaces: Interfaces::from_bits_warn(0), // dummy value
+            handle,
+        };
+        this.fill_capabilities()?;
+        this.fill_interfaces()?;
+
+        Ok(this)
+    }
+
     /// Reads the advertised capabilities from the device.
     fn fill_capabilities(&mut self) -> Result<()> {
         self.write_cmd(&[Command::GetCaps as u8])?;
@@ -517,6 +652,7 @@ impl JayLink {
         vec
     }
 
+    #[cfg(not(feature = "nusb"))]
     fn write_cmd(&self, cmd: &[u8]) -> Result<()> {
         trace!("write {} bytes: {:x?}", cmd.len(), cmd);
 
@@ -536,6 +672,27 @@ impl JayLink {
         Ok(())
     }
 
+    #[cfg(feature = "nusb")]
+    fn write_cmd(&self, cmd: &[u8]) -> Result<()> {
+        trace!("write {} bytes: {:x?}", cmd.len(), cmd);
+
+        let fut = self.handle.bulk_out(self.write_ep, cmd.to_vec());
+
+        let res = futures_lite::future::block_on(fut);
+        res.status.jaylink_err_while("writing data to device")?;
+
+        if res.data.actual_length() != cmd.len() {
+            return Err(format!(
+                "incomplete write (expected {} bytes, wrote {})",
+                cmd.len(),
+                res.data.actual_length()
+            ))
+            .jaylink_err();
+        }
+        Ok(())
+    }
+
+    #[cfg(not(feature = "nusb"))]
     fn read(&self, buf: &mut [u8]) -> Result<()> {
         let mut total = 0;
 
@@ -549,6 +706,24 @@ impl JayLink {
         }
 
         trace!("read {} bytes: {:x?}", buf.len(), buf);
+        Ok(())
+    }
+
+    #[cfg(feature = "nusb")]
+    fn read(&self, buf: &mut [u8]) -> Result<()> {
+        let mut total = 0;
+
+        while total < buf.len() {
+            let rbuf = nusb::transfer::RequestBuffer::new(buf.len() - total);
+            let fut = self.handle.bulk_in(self.read_ep, rbuf);
+            let res = futures_lite::future::block_on(fut);
+            res.status.jaylink_err_while("reading from device")?;
+            buf[total..][..res.data.len()].copy_from_slice(&res.data);
+            total += res.data.len();
+        }
+
+        trace!("read {} bytes: {:x?}", buf.len(), buf);
+
         Ok(())
     }
 
@@ -593,8 +768,8 @@ impl JayLink {
         self.read(&mut buf)?;
         let num_bytes = u16::from_le_bytes(buf);
         let mut buf = self.buf(num_bytes.into());
-        let mut buf = &mut buf[..usize::from(num_bytes)];
-        self.read(&mut buf)?;
+        let buf = &mut buf[..usize::from(num_bytes)];
+        self.read(buf)?;
 
         Ok(String::from_utf8_lossy(
             // The firmware version string returned may contain null bytes. If
@@ -1472,7 +1647,10 @@ impl fmt::Display for SpeedConfig {
 /// Returned by [`scan_usb`].
 #[derive(Debug)]
 pub struct UsbDeviceInfo {
+    #[cfg(not(feature = "nusb"))]
     inner: rusb::Device<rusb::GlobalContext>,
+    #[cfg(feature = "nusb")]
+    inner: nusb::DeviceInfo,
     vid: u16,
     pid: u16,
 }
@@ -1498,12 +1676,16 @@ impl UsbDeviceInfo {
 
     /// Returns the device address on the bus it's attached to.
     pub fn address(&self) -> u8 {
-        self.inner.address()
+        #[cfg(not(feature = "nusb"))]
+        return self.inner.address();
+        #[cfg(feature = "nusb")]
+        return self.inner.device_address();
     }
 
     /// Returns the port the device is attached to.
-    pub fn port_number(&self) -> u8 {
-        self.inner.port_number()
+    #[cfg(any(not(feature = "nusb"), all(feature = "nusb", target_os = "windows")))]
+    pub fn port_number(&self) -> u32 {
+        self.inner.port_number() as _
     }
 
     /// Tries to open this USB device.
@@ -1519,6 +1701,7 @@ impl UsbDeviceInfo {
 /// Scans for J-Link USB devices.
 ///
 /// The returned iterator will yield all devices made by Segger, without filtering the product ID.
+#[cfg(not(feature = "nusb"))]
 pub fn scan_usb() -> Result<impl Iterator<Item = UsbDeviceInfo>> {
     log_libusb_info();
 
@@ -1546,7 +1729,33 @@ pub fn scan_usb() -> Result<impl Iterator<Item = UsbDeviceInfo>> {
         .into_iter())
 }
 
+/// Scans for J-Link USB devices.
+///
+/// The returned iterator will yield all devices made by Segger, without filtering the product ID.
+#[cfg(feature = "nusb")]
+pub fn scan_usb() -> Result<impl Iterator<Item = UsbDeviceInfo>> {
+    debug!("using nusb");
+
+    Ok(nusb::list_devices()
+        .jaylink_err()?
+        .filter_map(|dev| {
+            if dev.vendor_id() == VID_SEGGER {
+                Some(UsbDeviceInfo {
+                    vid: dev.vendor_id(),
+                    pid: dev.product_id(),
+                    inner: dev,
+                })
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_iter())
+}
+
+#[cfg(not(feature = "nusb"))]
 fn log_libusb_info() {
+    use std::sync::atomic::{AtomicBool, Ordering};
     static DID_LOG: AtomicBool = AtomicBool::new(false);
 
     if DID_LOG.swap(true, Ordering::Acquire) {
